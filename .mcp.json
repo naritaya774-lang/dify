@@ -1,0 +1,8 @@
+{
+  "mcpServers": {
+    "fujitsu-server": {
+      "type": "http",
+      "url": "https://fujitsu-server.tail5be94e.ts.net:9443/mcp"
+    }
+  }
+}
