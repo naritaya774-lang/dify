@@ -83,297 +83,298 @@ export default function Toolbar() {
 
   return (
     <div style={styles.toolbar}>
-      {/* Brand */}
-      <div style={styles.brand}>
-        <span style={styles.brandIcon}>◈</span>
-        <span style={styles.brandText}>{t('appName')}</span>
-      </div>
-      <div style={styles.divider} />
-
-      {/* Macro recording */}
-      {recording ? (
-        <div style={styles.recGroup}>
-          <span style={styles.recDot}>⏺</span>
-          <input
-            style={styles.recInput}
-            value={recordingName}
-            onChange={(e) => setRecordingName(e.target.value)}
-            placeholder={lang === 'ja' ? 'マクロ名...' : 'Macro name...'}
-          />
-          <button style={styles.stopBtn} onClick={handleStopRecording}>⏹ {t('stopRecord')}</button>
-          <button style={styles.cancelRecBtn} onClick={cancelRecording}>✕</button>
+      {/* Row 1: Brand | File | Undo/Redo | Camera | Grid/Axes | spacer | Tutorial/Shortcuts | Lang | Clear */}
+      <div style={styles.row}>
+        {/* Brand */}
+        <div style={styles.brand}>
+          <span style={styles.brandIcon}>◈</span>
+          <span style={styles.brandText}>{t('appName')}</span>
         </div>
-      ) : (
-        <>
-          <div style={styles.groupLabel}>{t('macro')}</div>
-          <div style={styles.group}>
-            <button style={styles.iconBtn} onClick={startRecording} title={t('record')}>
-              <span style={{ fontSize: 13, color: '#ff6b6b' }}>⏺</span>
-              <span style={styles.btnLabel}>{t('record')}</span>
+        <div style={styles.divider} />
+
+        {/* Open / Save */}
+        <div style={styles.group}>
+          <button style={styles.btn} onClick={handleOpen}>📂 {t('open')}</button>
+          <button style={styles.btn} onClick={handleSave}>💾 {t('save')}</button>
+        </div>
+        <div style={styles.divider} />
+
+        {/* Undo / Redo */}
+        <div style={styles.group}>
+          <button style={styles.iconBtn} onClick={undo} title={`${t('undo')} [Ctrl+Z]`}>
+            <span style={{ fontSize: 15 }}>↩</span>
+            <span style={styles.btnLabel}>{t('undo')}</span>
+          </button>
+          <button style={styles.iconBtn} onClick={redo} title={`${t('redo')} [Ctrl+Y]`}>
+            <span style={{ fontSize: 15 }}>↪</span>
+            <span style={styles.btnLabel}>{t('redo')}</span>
+          </button>
+        </div>
+        <div style={styles.divider} />
+
+        {/* Camera presets */}
+        <div style={styles.group}>
+          {([
+            { key: 'perspective', label: t('viewPersp'), icon: '◈' },
+            { key: 'top', label: t('viewTop'), icon: '⊤' },
+            { key: 'front', label: t('viewFront'), icon: '□' },
+            { key: 'right', label: t('viewRight'), icon: '▷' },
+          ] as const).map(({ key, label, icon }) => (
+            <button key={key} style={styles.iconBtn} onClick={() => viewportActions.setView?.(key)} title={label}>
+              <span style={{ fontSize: 13 }}>{icon}</span>
+              <span style={styles.btnLabel}>{label}</span>
             </button>
-            <button style={{ ...styles.iconBtn, position: 'relative' }} onClick={() => setShowMacroPanel(true)} title={t('macros')}>
-              <span style={{ fontSize: 13 }}>📋</span>
-              <span style={styles.btnLabel}>{t('macros')}</span>
-              {macros.length > 0 && (
-                <span style={styles.macroBadge}>{macros.length}</span>
-              )}
-            </button>
-            <button style={styles.iconBtn} onClick={() => setShowPythonPanel(true)} title={t('pyScripts')}>
-              <span style={{ fontSize: 13 }}>🐍</span>
-              <span style={styles.btnLabel}>{t('python')}</span>
-            </button>
+          ))}
+        </div>
+        <div style={styles.divider} />
+
+        {/* Grid / Axes */}
+        <div style={styles.group}>
+          <button style={{ ...styles.iconBtn, ...(gridVisible ? styles.active : {}) }} onClick={toggleGrid}>
+            <span>#</span><span style={styles.btnLabel}>{t('grid')}</span>
+          </button>
+          <button style={{ ...styles.iconBtn, ...(axesVisible ? styles.active : {}) }} onClick={toggleAxes}>
+            <span>⊹</span><span style={styles.btnLabel}>{t('axes')}</span>
+          </button>
+        </div>
+
+        <div style={{ flex: 1 }} />
+
+        {/* Status */}
+        <div style={styles.status}>
+          <span style={styles.statusText}>{t('objects')}: {objects.length}</span>
+          {selectedIds.length > 0 && (
+            <span style={styles.statusActive}>● {selectedIds.length}{lang === 'ja' ? '個' : ''}</span>
+          )}
+        </div>
+        <div style={styles.divider} />
+
+        {/* Tutorial / Shortcuts */}
+        <div style={styles.group}>
+          <button style={styles.iconBtn} onClick={() => setShowTutorial(true)} title={t('tutorial')}>
+            <span style={{ fontSize: 14 }}>📖</span>
+            <span style={styles.btnLabel}>{t('tutorial')}</span>
+          </button>
+          <button style={styles.iconBtn} onClick={() => setShowShortcuts(true)} title={t('shortcuts')}>
+            <span style={{ fontSize: 14 }}>⌨</span>
+            <span style={styles.btnLabel}>{t('shortcuts')}</span>
+          </button>
+        </div>
+        <div style={styles.divider} />
+
+        {/* Language toggle */}
+        <button style={styles.langBtn} onClick={() => setLang(lang === 'ja' ? 'en' : 'ja')} title="Switch language">
+          {lang === 'ja' ? '🇯🇵 日本語' : '🇺🇸 English'}
+        </button>
+        <div style={styles.divider} />
+
+        {/* Clear */}
+        <button
+          style={{ ...styles.btn, color: '#ff6b6b' }}
+          onClick={() => { if (confirm(t('clearConfirm'))) clearScene() }}
+        >
+          {t('clearScene')}
+        </button>
+      </div>
+
+      {/* Row separator */}
+      <div style={styles.rowSep} />
+
+      {/* Row 2: Tools or Recording bar */}
+      <div style={styles.row}>
+        {recording ? (
+          <div style={{ ...styles.recGroup, flex: 1 }}>
+            <span style={styles.recDot}>⏺</span>
+            <input
+              style={styles.recInput}
+              value={recordingName}
+              onChange={(e) => setRecordingName(e.target.value)}
+              placeholder={lang === 'ja' ? 'マクロ名...' : 'Macro name...'}
+            />
+            <button style={styles.stopBtn} onClick={handleStopRecording}>⏹ {t('stopRecord')}</button>
+            <button style={styles.cancelRecBtn} onClick={cancelRecording}>✕</button>
           </div>
-          <div style={styles.divider} />
-        </>
-      )}
+        ) : (
+          <>
+            {/* ADD */}
+            <div style={styles.groupLabel}>{t('add')}</div>
+            <div style={styles.group}>
+              {PRIMITIVES.map((type) => (
+                <button key={type} style={styles.iconBtn} onClick={() => addObject(type)} title={t(type)}>
+                  <span>{PRIMITIVE_ICONS[type]}</span>
+                  <span style={styles.btnLabel}>{t(type)}</span>
+                </button>
+              ))}
+            </div>
+            <div style={styles.divider} />
 
-      {/* File */}
-      <div style={styles.group}>
-        <button style={styles.btn} onClick={handleOpen}>📂 {t('open')}</button>
-        <button style={styles.btn} onClick={handleSave}>💾 {t('save')}</button>
-      </div>
-      <div style={styles.divider} />
+            {/* SKETCH */}
+            <div style={styles.groupLabel}>{t('sketch')}</div>
+            <div style={styles.group}>
+              <button
+                style={{ ...styles.iconBtn, ...(sketchStore.active && sketchStore.mode === 'extrude' ? styles.active : {}) }}
+                onClick={() => sketchStore.active ? sketchStore.cancelSketch() : sketchStore.startSketch('extrude')}
+                title={t('sketchExtrude')}
+              >
+                <span style={{ fontSize: 14 }}>✏</span>
+                <span style={styles.btnLabel}>{t('sketch')}</span>
+              </button>
+              <button
+                style={{ ...styles.iconBtn, ...(sketchStore.active && sketchStore.mode === 'revolve' ? styles.active : {}) }}
+                onClick={() => sketchStore.active ? sketchStore.cancelSketch() : sketchStore.startSketch('revolve')}
+                title={t('sketchRevolve')}
+              >
+                <span style={{ fontSize: 14 }}>↺</span>
+                <span style={styles.btnLabel}>{t('revolve')}</span>
+              </button>
+            </div>
+            <div style={styles.divider} />
 
-      {/* Undo / Redo */}
-      <div style={styles.group}>
-        <button style={styles.iconBtn} onClick={undo} title={`${t('undo')} [Ctrl+Z]`}>
-          <span style={{ fontSize: 15 }}>↩</span>
-          <span style={styles.btnLabel}>{t('undo')}</span>
-        </button>
-        <button style={styles.iconBtn} onClick={redo} title={`${t('redo')} [Ctrl+Y]`}>
-          <span style={{ fontSize: 15 }}>↪</span>
-          <span style={styles.btnLabel}>{t('redo')}</span>
-        </button>
-      </div>
-      <div style={styles.divider} />
+            {/* TRANSFORM */}
+            <div style={styles.groupLabel}>{t('transform')}</div>
+            <div style={styles.group}>
+              {TRANSFORM_MODES.map(({ mode, labelKey, icon, shortcut }) => (
+                <button
+                  key={mode}
+                  style={{ ...styles.iconBtn, ...(transformMode === mode ? styles.active : {}) }}
+                  onClick={() => setTransformMode(mode)}
+                  title={`${t(labelKey)} [${shortcut}]`}
+                >
+                  <span style={{ fontSize: 18 }}>{icon}</span>
+                  <span style={styles.btnLabel}>{t(labelKey)}</span>
+                </button>
+              ))}
+            </div>
+            <div style={styles.divider} />
 
-      {/* Import */}
-      <div style={styles.groupLabel}>Import</div>
-      <div style={styles.group}>
-        <button style={styles.iconBtn} onClick={() => stlInputRef.current?.click()} title="Import STL">
-          <span style={{ fontSize: 13 }}>📥</span>
-          <span style={styles.btnLabel}>{t('importSTL')}</span>
-        </button>
-        <button style={styles.iconBtn} onClick={() => objInputRef.current?.click()} title="Import OBJ">
-          <span style={{ fontSize: 13 }}>📥</span>
-          <span style={styles.btnLabel}>{t('importOBJ')}</span>
-        </button>
-        <input ref={stlInputRef} type="file" accept=".stl" style={{ display: 'none' }}
-          onChange={(e) => { const f = e.target.files?.[0]; if (f) viewportActions.importFile?.(f); e.target.value = '' }} />
-        <input ref={objInputRef} type="file" accept=".obj" style={{ display: 'none' }}
-          onChange={(e) => { const f = e.target.files?.[0]; if (f) viewportActions.importFile?.(f); e.target.value = '' }} />
-      </div>
-      <div style={styles.divider} />
+            {/* BOOLEAN */}
+            <div style={styles.groupLabel}>{t('boolean')}</div>
+            <div style={styles.group}>
+              {BOOLEAN_OPS.map(({ op, icon }) => (
+                <button
+                  key={op}
+                  style={{ ...styles.iconBtn, opacity: canBoolean ? 1 : 0.38 }}
+                  disabled={!canBoolean}
+                  onClick={() => viewportActions.booleanOp?.(op)}
+                  title={canBoolean ? t(op) : t('booleanHint')}
+                >
+                  <span style={{ fontSize: 16 }}>{icon}</span>
+                  <span style={styles.btnLabel}>{t(op)}</span>
+                </button>
+              ))}
+            </div>
+            <div style={styles.divider} />
 
-      {/* Add */}
-      <div style={styles.groupLabel}>{t('add')}</div>
-      <div style={styles.group}>
-        {PRIMITIVES.map((type) => (
-          <button key={type} style={styles.iconBtn} onClick={() => addObject(type)} title={t(type)}>
-            <span>{PRIMITIVE_ICONS[type]}</span>
-            <span style={styles.btnLabel}>{t(type)}</span>
-          </button>
-        ))}
-      </div>
-      <div style={styles.divider} />
+            {/* ARRAY / MIRROR */}
+            <div style={styles.groupLabel}>{t('array')}/{t('mirror')}</div>
+            <div style={styles.group}>
+              <button
+                style={{ ...styles.iconBtn, opacity: hasSelection ? 1 : 0.38 }}
+                disabled={!hasSelection}
+                onClick={() => hasSelection && setShowArrayDialog(true)}
+                title={t('array')}
+              >
+                <span style={{ fontSize: 13 }}>⣿</span>
+                <span style={styles.btnLabel}>{t('array')}</span>
+              </button>
+              {(['x', 'y', 'z'] as const).map((ax) => (
+                <button
+                  key={ax}
+                  style={{ ...styles.iconBtn, opacity: hasSelection ? 1 : 0.38 }}
+                  disabled={!hasSelection}
+                  onClick={() => selectedIds[0] && mirrorObject(selectedIds[0], ax)}
+                  title={t(`mirror${ax.toUpperCase()}` as 'mirrorX' | 'mirrorY' | 'mirrorZ')}
+                >
+                  <span style={{ fontSize: 12 }}>⟺</span>
+                  <span style={styles.btnLabel}>{ax.toUpperCase()}</span>
+                </button>
+              ))}
+            </div>
+            <div style={styles.divider} />
 
-      {/* Sketch */}
-      <div style={styles.groupLabel}>{t('sketch')}</div>
-      <div style={styles.group}>
-        <button
-          style={{ ...styles.iconBtn, ...(sketchStore.active && sketchStore.mode === 'extrude' ? styles.active : {}) }}
-          onClick={() => sketchStore.active ? sketchStore.cancelSketch() : sketchStore.startSketch('extrude')}
-          title={t('sketchExtrude')}
-        >
-          <span style={{ fontSize: 14 }}>✏</span>
-          <span style={styles.btnLabel}>{t('sketch')}</span>
-        </button>
-        <button
-          style={{ ...styles.iconBtn, ...(sketchStore.active && sketchStore.mode === 'revolve' ? styles.active : {}) }}
-          onClick={() => sketchStore.active ? sketchStore.cancelSketch() : sketchStore.startSketch('revolve')}
-          title={t('sketchRevolve')}
-        >
-          <span style={{ fontSize: 14 }}>↺</span>
-          <span style={styles.btnLabel}>{t('revolve')}</span>
-        </button>
-      </div>
-      <div style={styles.divider} />
+            {/* EXPORT / IMPORT */}
+            <div style={styles.groupLabel}>{t('export')}</div>
+            <div style={styles.group}>
+              <button style={styles.iconBtn} onClick={() => viewportActions.exportSTL?.()} title="Export STL">
+                <span style={{ fontSize: 13 }}>🖨</span>
+                <span style={styles.btnLabel}>{t('exportSTL')}</span>
+              </button>
+              <button style={styles.iconBtn} onClick={() => viewportActions.exportOBJ?.()} title="Export OBJ">
+                <span style={{ fontSize: 13 }}>📦</span>
+                <span style={styles.btnLabel}>{t('exportOBJ')}</span>
+              </button>
+              <button style={styles.iconBtn} onClick={() => stlInputRef.current?.click()} title="Import STL">
+                <span style={{ fontSize: 13 }}>📥</span>
+                <span style={styles.btnLabel}>{t('importSTL')}</span>
+              </button>
+              <button style={styles.iconBtn} onClick={() => objInputRef.current?.click()} title="Import OBJ">
+                <span style={{ fontSize: 13 }}>📥</span>
+                <span style={styles.btnLabel}>{t('importOBJ')}</span>
+              </button>
+              <input ref={stlInputRef} type="file" accept=".stl" style={{ display: 'none' }}
+                onChange={(e) => { const f = e.target.files?.[0]; if (f) viewportActions.importFile?.(f); e.target.value = '' }} />
+              <input ref={objInputRef} type="file" accept=".obj" style={{ display: 'none' }}
+                onChange={(e) => { const f = e.target.files?.[0]; if (f) viewportActions.importFile?.(f); e.target.value = '' }} />
+            </div>
+            <div style={styles.divider} />
 
-      {/* Transform */}
-      <div style={styles.groupLabel}>{t('transform')}</div>
-      <div style={styles.group}>
-        {TRANSFORM_MODES.map(({ mode, labelKey, icon, shortcut }) => (
-          <button
-            key={mode}
-            style={{ ...styles.iconBtn, ...(transformMode === mode ? styles.active : {}) }}
-            onClick={() => setTransformMode(mode)}
-            title={`${t(labelKey)} [${shortcut}]`}
-          >
-            <span style={{ fontSize: 18 }}>{icon}</span>
-            <span style={styles.btnLabel}>{t(labelKey)}</span>
-          </button>
-        ))}
-      </div>
-      <div style={styles.divider} />
+            {/* OBJECT */}
+            <div style={styles.groupLabel}>{t('object')}</div>
+            <div style={styles.group}>
+              <button
+                style={{ ...styles.iconBtn, opacity: hasSelection ? 1 : 0.4 }}
+                disabled={!hasSelection}
+                onClick={() => selectedIds[0] && duplicateObject(selectedIds[0])}
+                title={t('duplicate')}
+              >
+                <span>⧉</span>
+                <span style={styles.btnLabel}>{t('duplicate')}</span>
+              </button>
+              <button
+                style={{ ...styles.iconBtn, opacity: selectedIds.length >= 2 ? 1 : 0.4 }}
+                disabled={selectedIds.length < 2}
+                onClick={() => setShowAlignDialog(true)}
+                title={t('align')}
+              >
+                <span style={{ fontSize: 13 }}>⬡</span>
+                <span style={styles.btnLabel}>{t('align')}</span>
+              </button>
+              <button
+                style={{ ...styles.iconBtn, opacity: hasSelection ? 1 : 0.4 }}
+                disabled={!hasSelection}
+                onClick={() => selectedIds[0] && removeObject(selectedIds[0])}
+                title={`${t('delete')} [Del]`}
+              >
+                <span>🗑</span>
+                <span style={styles.btnLabel}>{t('delete')}</span>
+              </button>
+            </div>
+            <div style={styles.divider} />
 
-      {/* Boolean */}
-      <div style={styles.groupLabel}>{t('boolean')}</div>
-      <div style={styles.group}>
-        {BOOLEAN_OPS.map(({ op, icon }) => (
-          <button
-            key={op}
-            style={{ ...styles.iconBtn, opacity: canBoolean ? 1 : 0.38 }}
-            disabled={!canBoolean}
-            onClick={() => viewportActions.booleanOp?.(op)}
-            title={canBoolean ? t(op) : t('booleanHint')}
-          >
-            <span style={{ fontSize: 16 }}>{icon}</span>
-            <span style={styles.btnLabel}>{t(op)}</span>
-          </button>
-        ))}
-      </div>
-      <div style={styles.divider} />
-
-      {/* Array */}
-      <div style={styles.groupLabel}>{t('array')}</div>
-      <div style={styles.group}>
-        <button
-          style={{ ...styles.iconBtn, opacity: hasSelection ? 1 : 0.38 }}
-          disabled={!hasSelection}
-          onClick={() => hasSelection && setShowArrayDialog(true)}
-          title={t('array')}
-        >
-          <span style={{ fontSize: 13 }}>⣿</span>
-          <span style={styles.btnLabel}>{t('array')}</span>
-        </button>
-      </div>
-      <div style={styles.divider} />
-
-      {/* Mirror */}
-      <div style={styles.groupLabel}>{t('mirror')}</div>
-      <div style={styles.group}>
-        {(['x', 'y', 'z'] as const).map((ax) => (
-          <button
-            key={ax}
-            style={{ ...styles.iconBtn, opacity: hasSelection ? 1 : 0.38 }}
-            disabled={!hasSelection}
-            onClick={() => selectedIds[0] && mirrorObject(selectedIds[0], ax)}
-            title={t(`mirror${ax.toUpperCase()}` as 'mirrorX' | 'mirrorY' | 'mirrorZ')}
-          >
-            <span style={{ fontSize: 12 }}>⟺</span>
-            <span style={styles.btnLabel}>{ax.toUpperCase()}</span>
-          </button>
-        ))}
-      </div>
-      <div style={styles.divider} />
-
-      {/* Export */}
-      <div style={styles.groupLabel}>{t('export')}</div>
-      <div style={styles.group}>
-        <button style={styles.iconBtn} onClick={() => viewportActions.exportSTL?.()} title="Export STL">
-          <span style={{ fontSize: 13 }}>🖨</span>
-          <span style={styles.btnLabel}>{t('exportSTL')}</span>
-        </button>
-        <button style={styles.iconBtn} onClick={() => viewportActions.exportOBJ?.()} title="Export OBJ">
-          <span style={{ fontSize: 13 }}>📦</span>
-          <span style={styles.btnLabel}>{t('exportOBJ')}</span>
-        </button>
-      </div>
-      <div style={styles.divider} />
-
-      {/* Object actions */}
-      <div style={styles.groupLabel}>{t('object')}</div>
-      <div style={styles.group}>
-        <button
-          style={{ ...styles.iconBtn, opacity: hasSelection ? 1 : 0.4 }}
-          disabled={!hasSelection}
-          onClick={() => selectedIds[0] && duplicateObject(selectedIds[0])}
-          title={t('duplicate')}
-        >
-          <span>⧉</span>
-          <span style={styles.btnLabel}>{t('duplicate')}</span>
-        </button>
-        <button
-          style={{ ...styles.iconBtn, opacity: selectedIds.length >= 2 ? 1 : 0.4 }}
-          disabled={selectedIds.length < 2}
-          onClick={() => setShowAlignDialog(true)}
-          title={t('align')}
-        >
-          <span style={{ fontSize: 13 }}>⬡</span>
-          <span style={styles.btnLabel}>{t('align')}</span>
-        </button>
-        <button
-          style={{ ...styles.iconBtn, opacity: hasSelection ? 1 : 0.4 }}
-          disabled={!hasSelection}
-          onClick={() => selectedIds[0] && removeObject(selectedIds[0])}
-          title={`${t('delete')} [Del]`}
-        >
-          <span>🗑</span>
-          <span style={styles.btnLabel}>{t('delete')}</span>
-        </button>
-      </div>
-      <div style={styles.divider} />
-
-      {/* View */}
-      <div style={styles.groupLabel}>{t('view')}</div>
-      <div style={styles.group}>
-        <button style={{ ...styles.iconBtn, ...(gridVisible ? styles.active : {}) }} onClick={toggleGrid}>
-          <span>#</span><span style={styles.btnLabel}>{t('grid')}</span>
-        </button>
-        <button style={{ ...styles.iconBtn, ...(axesVisible ? styles.active : {}) }} onClick={toggleAxes}>
-          <span>⊹</span><span style={styles.btnLabel}>{t('axes')}</span>
-        </button>
-      </div>
-      <div style={styles.divider} />
-
-      {/* Camera */}
-      <div style={styles.groupLabel}>{t('camera')}</div>
-      <div style={styles.group}>
-        {([
-          { key: 'perspective', label: t('viewPersp'), icon: '◈' },
-          { key: 'top', label: t('viewTop'), icon: '⊤' },
-          { key: 'front', label: t('viewFront'), icon: '□' },
-          { key: 'right', label: t('viewRight'), icon: '▷' },
-        ] as const).map(({ key, label, icon }) => (
-          <button key={key} style={styles.iconBtn} onClick={() => viewportActions.setView?.(key)} title={label}>
-            <span style={{ fontSize: 13 }}>{icon}</span>
-            <span style={styles.btnLabel}>{label}</span>
-          </button>
-        ))}
-      </div>
-
-      <div style={{ flex: 1 }} />
-
-      {/* Status */}
-      <div style={styles.status}>
-        <span style={styles.statusText}>{t('objects')}: {objects.length}</span>
-        {selectedIds.length > 0 && (
-          <span style={styles.statusActive}>● {selectedIds.length}{lang === 'ja' ? '個' : ''}</span>
+            {/* MACRO */}
+            <div style={styles.groupLabel}>{t('macro')}</div>
+            <div style={styles.group}>
+              <button style={styles.iconBtn} onClick={startRecording} title={t('record')}>
+                <span style={{ fontSize: 13, color: '#ff6b6b' }}>⏺</span>
+                <span style={styles.btnLabel}>{t('record')}</span>
+              </button>
+              <button style={{ ...styles.iconBtn, position: 'relative' }} onClick={() => setShowMacroPanel(true)} title={t('macros')}>
+                <span style={{ fontSize: 13 }}>📋</span>
+                <span style={styles.btnLabel}>{t('macros')}</span>
+                {macros.length > 0 && (
+                  <span style={styles.macroBadge}>{macros.length}</span>
+                )}
+              </button>
+              <button style={styles.iconBtn} onClick={() => setShowPythonPanel(true)} title={t('pyScripts')}>
+                <span style={{ fontSize: 13 }}>🐍</span>
+                <span style={styles.btnLabel}>{t('python')}</span>
+              </button>
+            </div>
+          </>
         )}
       </div>
 
-      <div style={styles.divider} />
-      <button style={styles.iconBtn} onClick={() => setShowShortcuts(true)} title={t('shortcuts')}>
-        <span style={{ fontSize: 14 }}>⌨</span>
-        <span style={styles.btnLabel}>{t('shortcuts')}</span>
-      </button>
-      <button style={styles.iconBtn} onClick={() => setShowTutorial(true)} title={t('tutorial')}>
-        <span style={{ fontSize: 14 }}>📖</span>
-        <span style={styles.btnLabel}>{t('tutorial')}</span>
-      </button>
-      <div style={styles.divider} />
-      <button style={{ ...styles.langBtn }} onClick={() => setLang(lang === 'ja' ? 'en' : 'ja')} title="Switch language">
-        {lang === 'ja' ? '🇯🇵 日本語' : '🇺🇸 English'}
-      </button>
-
-      <button
-        style={{ ...styles.btn, color: '#ff6b6b', marginLeft: 4 }}
-        onClick={() => { if (confirm(t('clearConfirm'))) clearScene() }}
-      >
-        {t('clearScene')}
-      </button>
-
-      {/* Array Dialog */}
+      {/* Dialogs */}
       {showArrayDialog && selectedIds[0] && (
         <ArrayDialog
           objectId={selectedIds[0]}
@@ -402,21 +403,30 @@ export default function Toolbar() {
 const styles: Record<string, React.CSSProperties> = {
   toolbar: {
     display: 'flex',
-    alignItems: 'center',
-    gap: 4,
+    flexDirection: 'column',
     background: '#12122a',
     borderBottom: '1px solid #2a2a4a',
-    padding: '0 12px',
-    height: 52,
     flexShrink: 0,
     userSelect: 'none',
+  },
+  row: {
+    display: 'flex',
+    alignItems: 'center',
+    gap: 4,
+    padding: '0 12px',
+    height: 48,
     overflowX: 'auto',
+  },
+  rowSep: {
+    height: 1,
+    background: '#1e1e3a',
+    flexShrink: 0,
   },
   brand: { display: 'flex', alignItems: 'center', gap: 6, marginRight: 4 },
   brandIcon: { fontSize: 22, color: '#4a9eff' },
   brandText: { fontSize: 15, fontWeight: 700, color: '#e0e0ff', letterSpacing: 1 },
   divider: { width: 1, height: 32, background: '#2a2a4a', margin: '0 4px', flexShrink: 0 },
-  groupLabel: { fontSize: 9, color: '#666688', textTransform: 'uppercase', letterSpacing: 1, marginRight: 2, flexShrink: 0 },
+  groupLabel: { fontSize: 10, color: '#7070a0', textTransform: 'uppercase', letterSpacing: 1, marginRight: 2, flexShrink: 0 },
   group: { display: 'flex', gap: 2, alignItems: 'center' },
   btn: {
     background: '#1e1e3a',
@@ -436,10 +446,10 @@ const styles: Record<string, React.CSSProperties> = {
     border: '1px solid #2a2a4a',
     borderRadius: 5,
     color: '#c0c0e0',
-    padding: '3px 7px',
+    padding: '4px 8px',
     cursor: 'pointer',
     fontSize: 14,
-    minWidth: 40,
+    minWidth: 50,
     gap: 1,
   },
   langBtn: {
@@ -453,7 +463,7 @@ const styles: Record<string, React.CSSProperties> = {
     whiteSpace: 'nowrap',
   },
   active: { background: '#1a3a6a', border: '1px solid #4a9eff', color: '#4a9eff' },
-  btnLabel: { fontSize: 9, color: '#8888aa' },
+  btnLabel: { fontSize: 10, color: '#8888aa' },
   status: { display: 'flex', alignItems: 'center', gap: 8, fontSize: 11 },
   statusText: { color: '#666688' },
   statusActive: { color: '#51cf66', fontWeight: 600 },

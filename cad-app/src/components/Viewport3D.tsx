@@ -97,6 +97,9 @@ export default function Viewport3D() {
 
   const interactionRef = useRef<InteractionState>({ kind: 'idle' })
 
+  const hoveredIdRef = useRef<string | null>(null)
+  const hoverMeshRef = useRef<THREE.Mesh | null>(null)
+
   const { objects, selectedIds, transformMode, gridVisible, axesVisible, selectObject, updateObject } = useSceneStore()
   const { active: sketchActive, mode: sketchMode, shapes, currentPoints, mousePos } = useSketchStore()
 
@@ -469,6 +472,37 @@ export default function Viewport3D() {
     }
   }, [sketchActive, sketchMode, shapes, currentPoints, mousePos])
 
+  const clearHover = useCallback(() => {
+    const id = hoveredIdRef.current
+    if (!id) return
+    const mesh = meshMapRef.current.get(id)
+    if (mesh && hoverMeshRef.current) mesh.remove(hoverMeshRef.current)
+    if (hoverMeshRef.current) {
+      hoverMeshRef.current.geometry.dispose()
+      ;(hoverMeshRef.current.material as THREE.Material).dispose()
+      hoverMeshRef.current = null
+    }
+    hoveredIdRef.current = null
+    if (mountRef.current) mountRef.current.style.cursor = 'default'
+  }, [])
+
+  const applyHover = useCallback((id: string | null) => {
+    if (id === hoveredIdRef.current) return
+    clearHover()
+    if (!id) return
+    const mesh = meshMapRef.current.get(id)
+    if (!mesh) return
+    const hm = new THREE.Mesh(
+      mesh.geometry.clone(),
+      new THREE.MeshBasicMaterial({ color: 0xffcc00, side: THREE.BackSide, transparent: true, opacity: 0.35 }),
+    )
+    hm.scale.multiplyScalar(1.06)
+    mesh.add(hm)
+    hoverMeshRef.current = hm
+    hoveredIdRef.current = id
+    if (mountRef.current) mountRef.current.style.cursor = 'pointer'
+  }, [clearHover])
+
   // Sync CAD objects
   useEffect(() => {
     const scene = sceneRef.current
@@ -480,6 +514,7 @@ export default function Viewport3D() {
         scene.remove(mesh)
         const outline = outlineMapRef.current.get(id)
         if (outline) { mesh.remove(outline); outlineMapRef.current.delete(id) }
+        if (hoveredIdRef.current === id) clearHover()
         mesh.geometry.dispose()
         ;(mesh.material as THREE.Material).dispose()
         meshMapRef.current.delete(id)
@@ -502,7 +537,7 @@ export default function Viewport3D() {
       }
       applyTransform(mesh, obj)
     })
-  }, [objects])
+  }, [objects, clearHover])
 
   // Selection outlines
   useEffect(() => {
@@ -572,6 +607,7 @@ export default function Viewport3D() {
     if (!obj) return
 
     e.currentTarget.setPointerCapture(e.pointerId)
+    clearHover()
     if (orbitRef.current) orbitRef.current.enabled = false
 
     const plane = new THREE.Plane(new THREE.Vector3(0, 1, 0), -obj.position.y)
@@ -587,38 +623,40 @@ export default function Viewport3D() {
       offset: new THREE.Vector3(obj.position.x - projected.x, 0, obj.position.z - projected.z),
       moved: false,
     }
-  }, [])
+  }, [clearHover])
 
   const handlePointerMove = useCallback((e: React.PointerEvent<HTMLDivElement>) => {
     const state = interactionRef.current
-    if (state.kind !== 'object') return
-    if (transformRef.current?.dragging) { interactionRef.current = { kind: 'idle' }; return }
-
-    if (!state.moved && Math.hypot(e.clientX - state.startX, e.clientY - state.startY) < 6) return
-
+    if (state.kind === 'object') {
+      if (transformRef.current?.dragging) { interactionRef.current = { kind: 'idle' }; return }
+      if (!state.moved && Math.hypot(e.clientX - state.startX, e.clientY - state.startY) < 6) return
+      const mount = mountRef.current; const camera = cameraRef.current
+      if (!mount || !camera) return
+      if (!state.moved) { state.moved = true; useSceneStore.getState()._snapshot() }
+      const rect = mount.getBoundingClientRect()
+      const nx = ((e.clientX - rect.left) / rect.width) * 2 - 1
+      const ny = -((e.clientY - rect.top) / rect.height) * 2 + 1
+      raycasterRef.current.setFromCamera(new THREE.Vector2(nx, ny), camera)
+      const target = new THREE.Vector3()
+      if (!raycasterRef.current.ray.intersectPlane(state.plane, target)) return
+      const obj = useSceneStore.getState().objects.find((o) => o.id === state.id)
+      if (!obj) return
+      useSceneStore.getState().updateObject(state.id, {
+        position: { x: target.x + state.offset.x, y: obj.position.y, z: target.z + state.offset.z },
+      })
+      return
+    }
+    if (useSketchStore.getState().active) return
+    // Hover detection
     const mount = mountRef.current; const camera = cameraRef.current
     if (!mount || !camera) return
-
-    if (!state.moved) {
-      state.moved = true
-      useSceneStore.getState()._snapshot()
-    }
-
     const rect = mount.getBoundingClientRect()
     const nx = ((e.clientX - rect.left) / rect.width) * 2 - 1
     const ny = -((e.clientY - rect.top) / rect.height) * 2 + 1
     raycasterRef.current.setFromCamera(new THREE.Vector2(nx, ny), camera)
-
-    const target = new THREE.Vector3()
-    if (!raycasterRef.current.ray.intersectPlane(state.plane, target)) return
-
-    const obj = useSceneStore.getState().objects.find((o) => o.id === state.id)
-    if (!obj) return
-
-    useSceneStore.getState().updateObject(state.id, {
-      position: { x: target.x + state.offset.x, y: obj.position.y, z: target.z + state.offset.z },
-    })
-  }, [])
+    const hits = raycasterRef.current.intersectObjects(Array.from(meshMapRef.current.values()))
+    applyHover(hits.length > 0 ? (hits[0].object.userData.cadId as string) : null)
+  }, [applyHover])
 
   const handlePointerUp = useCallback((e: React.PointerEvent<HTMLDivElement>) => {
     const state = interactionRef.current
@@ -635,10 +673,13 @@ export default function Viewport3D() {
   }, [selectObject])
 
   const handlePointerCancel = useCallback(() => {
+    clearHover()
     const state = interactionRef.current
     interactionRef.current = { kind: 'idle' }
     if (state.kind === 'object' && orbitRef.current) orbitRef.current.enabled = true
-  }, [])
+  }, [clearHover])
+
+  const handlePointerLeave = useCallback(() => { clearHover() }, [clearHover])
 
   return (
     <div
@@ -647,6 +688,7 @@ export default function Viewport3D() {
       onPointerMove={handlePointerMove}
       onPointerUp={handlePointerUp}
       onPointerCancel={handlePointerCancel}
+      onPointerLeave={handlePointerLeave}
       style={{ width: '100%', height: '100%', cursor: sketchActive ? 'crosshair' : 'default', touchAction: 'none' }}
     />
   )
