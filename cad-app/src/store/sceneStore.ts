@@ -18,6 +18,9 @@ interface SceneActions {
   clearScene: () => void
   loadScene: (state: SceneState) => void
   setFileName: (name: string) => void
+  linearArray: (id: string, axis: 'x' | 'y' | 'z', count: number, spacing: number) => void
+  circularArray: (id: string, axis: 'y', count: number, radius: number) => void
+  mirrorObject: (id: string, axis: 'x' | 'y' | 'z') => void
 }
 
 const COLORS = ['#4a9eff', '#ff6b6b', '#51cf66', '#ffd43b', '#cc5de8', '#ff922b', '#20c997', '#74c0fc']
@@ -134,4 +137,72 @@ export const useSceneStore = create<SceneState & SceneActions>((set, get) => ({
   loadScene: (state) => set({ ...state }),
 
   setFileName: (name) => set({ fileName: name }),
+
+  linearArray: (id, axis, count, spacing) => {
+    const obj = get().objects.find((o) => o.id === id)
+    if (!obj) return
+    const copies: CADObject[] = []
+    for (let i = 1; i < count; i++) {
+      const offset = i * spacing
+      const pos = { ...obj.position }
+      pos[axis] = obj.position[axis] + offset
+      copies.push({
+        ...obj,
+        id: makeId(),
+        name: `${obj.name} [${i}]`,
+        position: pos,
+        params: { ...obj.params },
+      })
+    }
+    set((s) => ({ objects: [...s.objects, ...copies] }))
+  },
+
+  circularArray: (id, _axis, count, radius) => {
+    const obj = get().objects.find((o) => o.id === id)
+    if (!obj) return
+    const copies: CADObject[] = []
+    for (let i = 0; i < count; i++) {
+      const angle = (i / count) * Math.PI * 2
+      const x = obj.position.x + Math.cos(angle) * radius
+      const z = obj.position.z + Math.sin(angle) * radius
+      copies.push({
+        ...obj,
+        id: makeId(),
+        name: `${obj.name} [${i}]`,
+        position: { x, y: obj.position.y, z },
+        params: { ...obj.params },
+      })
+    }
+    set((s) => ({ objects: [...s.objects, ...copies] }))
+  },
+
+  mirrorObject: (id, axis) => {
+    const obj = get().objects.find((o) => o.id === id)
+    if (!obj) return
+    const pos = { ...obj.position }
+    const rot = { ...obj.rotation }
+    const sc = { ...obj.scale }
+    pos[axis] = -pos[axis]
+    sc[axis] = -sc[axis]
+    if (axis === 'x') {
+      rot.y = -rot.y
+      rot.z = -rot.z
+    } else if (axis === 'y') {
+      rot.x = -rot.x
+      rot.z = -rot.z
+    } else {
+      rot.x = -rot.x
+      rot.y = -rot.y
+    }
+    const mirror: CADObject = {
+      ...obj,
+      id: makeId(),
+      name: `${obj.name} Mirror${axis.toUpperCase()}`,
+      position: pos,
+      rotation: rot,
+      scale: sc,
+      params: { ...obj.params },
+    }
+    set((s) => ({ objects: [...s.objects, mirror] }))
+  },
 }))

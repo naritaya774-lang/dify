@@ -2,11 +2,27 @@ export type PrimitiveType = 'box' | 'sphere' | 'cylinder' | 'cone' | 'torus' | '
 export type TransformMode = 'translate' | 'rotate' | 'scale'
 export type ViewMode = 'perspective' | 'top' | 'front' | 'right'
 export type BooleanOp = 'union' | 'subtract' | 'intersect'
+export type SketchTool = 'polyline' | 'circle' | 'rect'
+export type SketchMode = 'extrude' | 'revolve'
 
 export interface Vec3 {
   x: number
   y: number
   z: number
+}
+
+export interface Pt2 {
+  x: number
+  y: number
+}
+
+export interface SketchShape {
+  id: string
+  tool: SketchTool
+  points: Pt2[]
+  closed: boolean
+  circleCenter?: Pt2
+  circleRadius?: number
 }
 
 export interface GeometryParams {
@@ -38,7 +54,7 @@ export interface GeometryParams {
 export interface CADObject {
   id: string
   name: string
-  type: PrimitiveType | 'boolean'
+  type: PrimitiveType | 'boolean' | 'custom'
   position: Vec3
   rotation: Vec3
   scale: Vec3

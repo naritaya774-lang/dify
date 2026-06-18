@@ -1,6 +1,9 @@
+import { useState } from 'react'
 import { useSceneStore } from '../store/sceneStore'
+import { useSketchStore } from '../store/sketchStore'
 import { useLang } from '../i18n/useLang'
 import { viewportActions } from './Viewport3D'
+import ArrayDialog from './ArrayDialog'
 import type { BooleanOp, PrimitiveType, TransformMode } from '../types'
 
 const PRIMITIVE_ICONS: Record<PrimitiveType, string> = {
@@ -21,9 +24,11 @@ const TRANSFORM_MODES: { mode: TransformMode; labelKey: 'move' | 'rotate' | 'sca
 
 export default function Toolbar() {
   const { addObject, transformMode, setTransformMode, selectedIds, removeObject, duplicateObject,
-    gridVisible, axesVisible, toggleGrid, toggleAxes, clearScene, objects, fileName } =
+    gridVisible, axesVisible, toggleGrid, toggleAxes, clearScene, objects, fileName, mirrorObject } =
     useSceneStore()
+  const sketchStore = useSketchStore()
   const { t, lang, setLang } = useLang()
+  const [showArrayDialog, setShowArrayDialog] = useState(false)
 
   const PRIMITIVES: PrimitiveType[] = ['box', 'sphere', 'cylinder', 'cone', 'torus', 'plane']
 
@@ -52,6 +57,7 @@ export default function Toolbar() {
   }
 
   const canBoolean = selectedIds.length >= 2
+  const hasSelection = selectedIds.length > 0
 
   return (
     <div style={styles.toolbar}>
@@ -78,6 +84,28 @@ export default function Toolbar() {
             <span style={styles.btnLabel}>{t(type)}</span>
           </button>
         ))}
+      </div>
+      <div style={styles.divider} />
+
+      {/* Sketch */}
+      <div style={styles.groupLabel}>{t('sketch')}</div>
+      <div style={styles.group}>
+        <button
+          style={{ ...styles.iconBtn, ...(sketchStore.active && sketchStore.mode === 'extrude' ? styles.active : {}) }}
+          onClick={() => sketchStore.active ? sketchStore.cancelSketch() : sketchStore.startSketch('extrude')}
+          title={t('sketchExtrude')}
+        >
+          <span style={{ fontSize: 14 }}>✏</span>
+          <span style={styles.btnLabel}>{t('sketch')}</span>
+        </button>
+        <button
+          style={{ ...styles.iconBtn, ...(sketchStore.active && sketchStore.mode === 'revolve' ? styles.active : {}) }}
+          onClick={() => sketchStore.active ? sketchStore.cancelSketch() : sketchStore.startSketch('revolve')}
+          title={t('sketchRevolve')}
+        >
+          <span style={{ fontSize: 14 }}>↺</span>
+          <span style={styles.btnLabel}>{t('revolve')}</span>
+        </button>
       </div>
       <div style={styles.divider} />
 
@@ -116,6 +144,39 @@ export default function Toolbar() {
       </div>
       <div style={styles.divider} />
 
+      {/* Array */}
+      <div style={styles.groupLabel}>{t('array')}</div>
+      <div style={styles.group}>
+        <button
+          style={{ ...styles.iconBtn, opacity: hasSelection ? 1 : 0.38 }}
+          disabled={!hasSelection}
+          onClick={() => hasSelection && setShowArrayDialog(true)}
+          title={t('array')}
+        >
+          <span style={{ fontSize: 13 }}>⣿</span>
+          <span style={styles.btnLabel}>{t('array')}</span>
+        </button>
+      </div>
+      <div style={styles.divider} />
+
+      {/* Mirror */}
+      <div style={styles.groupLabel}>{t('mirror')}</div>
+      <div style={styles.group}>
+        {(['x', 'y', 'z'] as const).map((ax) => (
+          <button
+            key={ax}
+            style={{ ...styles.iconBtn, opacity: hasSelection ? 1 : 0.38 }}
+            disabled={!hasSelection}
+            onClick={() => selectedIds[0] && mirrorObject(selectedIds[0], ax)}
+            title={t(`mirror${ax.toUpperCase()}` as 'mirrorX' | 'mirrorY' | 'mirrorZ')}
+          >
+            <span style={{ fontSize: 12 }}>⟺</span>
+            <span style={styles.btnLabel}>{ax.toUpperCase()}</span>
+          </button>
+        ))}
+      </div>
+      <div style={styles.divider} />
+
       {/* Export */}
       <div style={styles.groupLabel}>{t('export')}</div>
       <div style={styles.group}>
@@ -134,8 +195,8 @@ export default function Toolbar() {
       <div style={styles.groupLabel}>{t('object')}</div>
       <div style={styles.group}>
         <button
-          style={{ ...styles.iconBtn, opacity: selectedIds.length > 0 ? 1 : 0.4 }}
-          disabled={selectedIds.length === 0}
+          style={{ ...styles.iconBtn, opacity: hasSelection ? 1 : 0.4 }}
+          disabled={!hasSelection}
           onClick={() => selectedIds[0] && duplicateObject(selectedIds[0])}
           title={t('duplicate')}
         >
@@ -143,8 +204,8 @@ export default function Toolbar() {
           <span style={styles.btnLabel}>{t('duplicate')}</span>
         </button>
         <button
-          style={{ ...styles.iconBtn, opacity: selectedIds.length > 0 ? 1 : 0.4 }}
-          disabled={selectedIds.length === 0}
+          style={{ ...styles.iconBtn, opacity: hasSelection ? 1 : 0.4 }}
+          disabled={!hasSelection}
           onClick={() => selectedIds[0] && removeObject(selectedIds[0])}
           title={`${t('delete')} [Del]`}
         >
@@ -186,6 +247,14 @@ export default function Toolbar() {
       >
         {t('clearScene')}
       </button>
+
+      {/* Array Dialog */}
+      {showArrayDialog && selectedIds[0] && (
+        <ArrayDialog
+          objectId={selectedIds[0]}
+          onClose={() => setShowArrayDialog(false)}
+        />
+      )}
     </div>
   )
 }

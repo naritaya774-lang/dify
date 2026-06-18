@@ -3,6 +3,7 @@ import Toolbar from './components/Toolbar'
 import Viewport3D from './components/Viewport3D'
 import ObjectList from './components/ObjectList'
 import PropertiesPanel from './components/PropertiesPanel'
+import SketchPanel from './components/SketchPanel'
 import { useSceneStore } from './store/sceneStore'
 import { useLang } from './i18n/useLang'
 
@@ -33,6 +34,7 @@ export default function App() {
         <ObjectList />
         <div style={styles.viewport}>
           <Viewport3D />
+          <SketchPanel />
           <div style={styles.hint}>{t('hint')}</div>
         </div>
         <PropertiesPanel />
