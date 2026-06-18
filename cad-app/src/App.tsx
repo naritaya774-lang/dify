@@ -7,7 +7,7 @@ import { useSceneStore } from './store/sceneStore'
 import { useLang } from './i18n/useLang'
 
 export default function App() {
-  const { selectedId, removeObject, setTransformMode } = useSceneStore()
+  const { selectedIds, removeObject, setTransformMode } = useSceneStore()
   const { t } = useLang()
 
   useEffect(() => {
@@ -15,7 +15,8 @@ export default function App() {
       const tag = (e.target as HTMLElement).tagName
       if (tag === 'INPUT') return
       if (e.key === 'Delete' || e.key === 'Backspace') {
-        if (selectedId) removeObject(selectedId)
+        const { selectedIds } = useSceneStore.getState()
+        selectedIds.forEach((id) => removeObject(id))
       }
       if (e.key === 'g' || e.key === 'G') setTransformMode('translate')
       if (e.key === 'r' || e.key === 'R') setTransformMode('rotate')
@@ -23,7 +24,7 @@ export default function App() {
     }
     window.addEventListener('keydown', onKey)
     return () => window.removeEventListener('keydown', onKey)
-  }, [selectedId, removeObject, setTransformMode])
+  }, [selectedIds, removeObject, setTransformMode])
 
   return (
     <div style={styles.app}>

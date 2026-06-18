@@ -6,7 +6,7 @@ const TYPE_ICONS: Record<string, string> = {
 }
 
 export default function ObjectList() {
-  const { objects, selectedId, selectObject, removeObject, updateObject } = useSceneStore()
+  const { objects, selectedIds, selectObject, removeObject, updateObject } = useSceneStore()
   const { t } = useLang()
 
   return (
@@ -24,10 +24,10 @@ export default function ObjectList() {
             key={obj.id}
             style={{
               ...styles.item,
-              ...(selectedId === obj.id ? styles.selected : {}),
+              ...(selectedIds.includes(obj.id) ? styles.selected : {}),
               opacity: obj.visible ? 1 : 0.45,
             }}
-            onClick={() => selectObject(obj.id)}
+            onClick={(e) => selectObject(obj.id, e.shiftKey)}
           >
             <span style={styles.icon}>{TYPE_ICONS[obj.type] ?? '◆'}</span>
             <span style={styles.name} title={obj.name}>{obj.name}</span>

@@ -21,14 +21,25 @@ export const translations = {
     clearConfirm: 'Clear all objects?',
     objects: 'Objects',
     selected: '● Selected',
+    // Boolean
+    boolean: 'Boolean',
+    union: 'Union',
+    subtract: 'Subtract',
+    intersect: 'Intersect',
+    booleanHint: 'Shift+click 2 objects first',
+    // Export
+    export: 'Export',
+    exportSTL: 'STL',
+    exportOBJ: 'OBJ',
     // Object list
-    sceneObjects: 'Scene Objects',
+    sceneObjects: 'Scene',
     noObjects: 'No objects — add from toolbar',
     hide: 'Hide',
     show: 'Show',
     // Properties
     properties: 'Properties',
     noSelection: 'No object selected',
+    multiSelected: ' selected',
     name: 'Name',
     type: 'Type',
     position: 'Position',
@@ -38,7 +49,22 @@ export const translations = {
     options: 'Options',
     wireframe: 'Wireframe',
     visible: 'Visible',
-    // Primitives
+    // Geometry params
+    geomParams: 'Geometry',
+    width: 'Width',
+    heightParam: 'Height',
+    depth: 'Depth',
+    radius: 'Radius',
+    radiusTop: 'Radius Top',
+    radiusBottom: 'Radius Bot',
+    tube: 'Tube R',
+    segsW: 'Segs W',
+    segsH: 'Segs H',
+    segsR: 'Segs R',
+    segsT: 'Segs T',
+    segsPhi: 'Segs φ',
+    segsTheta: 'Segs θ',
+    // Primitives / object types
     box: 'Box',
     sphere: 'Sphere',
     cylinder: 'Cylinder',
@@ -46,7 +72,7 @@ export const translations = {
     torus: 'Torus',
     plane: 'Plane',
     // Hints
-    hint: 'Left-click: select · Drag: orbit · Right-drag: pan · Scroll: zoom · G/R/S: transform',
+    hint: 'Click: select · Shift+click: multi-select · Drag: orbit · G/R/S: transform',
     // Object default names
     objBox: 'Box',
     objSphere: 'Sphere',
@@ -76,6 +102,16 @@ export const translations = {
     clearConfirm: '全オブジェクトを削除しますか？',
     objects: 'オブジェクト',
     selected: '● 選択中',
+    // Boolean
+    boolean: 'ブーリアン',
+    union: '結合',
+    subtract: '差分',
+    intersect: '交差',
+    booleanHint: 'Shift+クリックで2つ選択',
+    // Export
+    export: 'エクスポート',
+    exportSTL: 'STL',
+    exportOBJ: 'OBJ',
     // Object list
     sceneObjects: 'シーン',
     noObjects: 'オブジェクトなし — ツールバーから追加',
@@ -84,6 +120,7 @@ export const translations = {
     // Properties
     properties: 'プロパティ',
     noSelection: 'オブジェクト未選択',
+    multiSelected: '個選択中',
     name: '名前',
     type: '種類',
     position: '位置',
@@ -93,7 +130,22 @@ export const translations = {
     options: 'オプション',
     wireframe: 'ワイヤーフレーム',
     visible: '表示',
-    // Primitives
+    // Geometry params
+    geomParams: 'ジオメトリ',
+    width: '幅',
+    heightParam: '高さ',
+    depth: '奥行',
+    radius: '半径',
+    radiusTop: '上半径',
+    radiusBottom: '下半径',
+    tube: 'チューブ半径',
+    segsW: '分割 W',
+    segsH: '分割 H',
+    segsR: '分割 R',
+    segsT: '分割 T',
+    segsPhi: '分割 φ',
+    segsTheta: '分割 θ',
+    // Primitives / object types
     box: 'ボックス',
     sphere: '球体',
     cylinder: '円柱',
@@ -101,7 +153,7 @@ export const translations = {
     torus: 'トーラス',
     plane: '平面',
     // Hints
-    hint: '左クリック: 選択 · ドラッグ: 回転 · 右ドラッグ: パン · スクロール: ズーム · G/R/S: 変形',
+    hint: 'クリック: 選択 · Shift+クリック: 複数選択 · ドラッグ: 回転 · G/R/S: 変形',
     // Object default names
     objBox: 'ボックス',
     objSphere: '球体',
