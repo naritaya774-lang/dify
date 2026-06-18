@@ -7,6 +7,7 @@ import ArrayDialog from './ArrayDialog'
 import AlignDialog from './AlignDialog'
 import ShortcutsDialog from './ShortcutsDialog'
 import MacroPanel from './MacroPanel'
+import PythonPanel from './PythonPanel'
 import { useMacroStore } from '../store/macroStore'
 import type { BooleanOp, PrimitiveType, TransformMode } from '../types'
 
@@ -37,6 +38,7 @@ export default function Toolbar() {
   const [showAlignDialog, setShowAlignDialog] = useState(false)
   const [showShortcuts, setShowShortcuts] = useState(false)
   const [showMacroPanel, setShowMacroPanel] = useState(false)
+  const [showPythonPanel, setShowPythonPanel] = useState(false)
   const [recordingName, setRecordingName] = useState('')
   const stlInputRef = useRef<HTMLInputElement>(null)
   const objInputRef = useRef<HTMLInputElement>(null)
@@ -113,6 +115,10 @@ export default function Toolbar() {
               {macros.length > 0 && (
                 <span style={styles.macroBadge}>{macros.length}</span>
               )}
+            </button>
+            <button style={styles.iconBtn} onClick={() => setShowPythonPanel(true)} title={t('pyScripts')}>
+              <span style={{ fontSize: 13 }}>🐍</span>
+              <span style={styles.btnLabel}>{t('python')}</span>
             </button>
           </div>
           <div style={styles.divider} />
@@ -376,6 +382,9 @@ export default function Toolbar() {
       )}
       {showMacroPanel && (
         <MacroPanel onClose={() => setShowMacroPanel(false)} />
+      )}
+      {showPythonPanel && (
+        <PythonPanel onClose={() => setShowPythonPanel(false)} />
       )}
     </div>
   )
