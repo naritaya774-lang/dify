@@ -1,5 +1,7 @@
 import { create } from 'zustand'
 import { CADObject, PrimitiveType, SceneState, TransformMode, Vec3, ViewMode } from '../types'
+import { useLang } from '../i18n/useLang'
+import type { TranslationKey } from '../i18n/translations'
 
 interface SceneActions {
   addObject: (type: PrimitiveType) => void
@@ -44,9 +46,11 @@ export const useSceneStore = create<SceneState & SceneActions>((set, get) => ({
   addObject: (type) => {
     const color = COLORS[colorIndex % COLORS.length]
     colorIndex++
+    const key = `obj${type.charAt(0).toUpperCase() + type.slice(1)}` as TranslationKey
+    const baseName = useLang.getState().t(key)
     const obj: CADObject = {
       id: makeId(),
-      name: `${type.charAt(0).toUpperCase() + type.slice(1)} ${objCounter++}`,
+      name: `${baseName} ${objCounter++}`,
       type,
       position: { ...defaultPosition, y: type === 'plane' ? 0 : 0.5 },
       rotation: { ...defaultRotation },
@@ -81,10 +85,11 @@ export const useSceneStore = create<SceneState & SceneActions>((set, get) => ({
   duplicateObject: (id) => {
     const obj = get().objects.find((o) => o.id === id)
     if (!obj) return
+    const copyLabel = useLang.getState().t('objCopy')
     const copy: CADObject = {
       ...obj,
       id: makeId(),
-      name: `${obj.name} (copy)`,
+      name: `${obj.name} ${copyLabel}`,
       position: { ...obj.position, x: obj.position.x + 1.5 },
     }
     set((s) => ({ objects: [...s.objects, copy], selectedId: copy.id }))

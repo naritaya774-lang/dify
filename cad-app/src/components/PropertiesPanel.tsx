@@ -1,4 +1,5 @@
 import { useSceneStore } from '../store/sceneStore'
+import { useLang } from '../i18n/useLang'
 import type { Vec3 } from '../types'
 
 function Vec3Input({
@@ -40,13 +41,14 @@ function Vec3Input({
 
 export default function PropertiesPanel() {
   const { objects, selectedId, updateObject } = useSceneStore()
+  const { t } = useLang()
   const selected = objects.find((o) => o.id === selectedId)
 
   if (!selected) {
     return (
       <div style={styles.panel}>
-        <div style={styles.header}>Properties</div>
-        <div style={styles.empty}>No object selected</div>
+        <div style={styles.header}>{t('properties')}</div>
+        <div style={styles.empty}>{t('noSelection')}</div>
       </div>
     )
   }
@@ -55,10 +57,10 @@ export default function PropertiesPanel() {
 
   return (
     <div style={styles.panel}>
-      <div style={styles.header}>Properties</div>
+      <div style={styles.header}>{t('properties')}</div>
 
       <div style={styles.section}>
-        <label style={styles.label}>Name</label>
+        <label style={styles.label}>{t('name')}</label>
         <input
           style={styles.textInput}
           value={selected.name}
@@ -67,30 +69,16 @@ export default function PropertiesPanel() {
       </div>
 
       <div style={styles.section}>
-        <label style={styles.label}>Type</label>
-        <div style={styles.typeTag}>{selected.type}</div>
+        <label style={styles.label}>{t('type')}</label>
+        <div style={styles.typeTag}>{t(selected.type)}</div>
       </div>
 
-      <Vec3Input
-        label="Position"
-        value={selected.position}
-        onChange={(position) => upd({ position })}
-      />
-      <Vec3Input
-        label="Rotation (rad)"
-        value={selected.rotation}
-        onChange={(rotation) => upd({ rotation })}
-        step={0.05}
-      />
-      <Vec3Input
-        label="Scale"
-        value={selected.scale}
-        onChange={(scale) => upd({ scale })}
-        step={0.1}
-      />
+      <Vec3Input label={t('position')} value={selected.position} onChange={(position) => upd({ position })} />
+      <Vec3Input label={t('rotationRad')} value={selected.rotation} onChange={(rotation) => upd({ rotation })} step={0.05} />
+      <Vec3Input label={t('scaleLabel')} value={selected.scale} onChange={(scale) => upd({ scale })} step={0.1} />
 
       <div style={styles.section}>
-        <label style={styles.label}>Color</label>
+        <label style={styles.label}>{t('color')}</label>
         <div style={styles.colorRow}>
           <input
             type="color"
@@ -103,23 +91,15 @@ export default function PropertiesPanel() {
       </div>
 
       <div style={styles.section}>
-        <label style={styles.label}>Options</label>
+        <label style={styles.label}>{t('options')}</label>
         <div style={styles.checkRow}>
           <label style={styles.checkLabel}>
-            <input
-              type="checkbox"
-              checked={selected.wireframe}
-              onChange={(e) => upd({ wireframe: e.target.checked })}
-            />
-            Wireframe
+            <input type="checkbox" checked={selected.wireframe} onChange={(e) => upd({ wireframe: e.target.checked })} />
+            {t('wireframe')}
           </label>
           <label style={styles.checkLabel}>
-            <input
-              type="checkbox"
-              checked={selected.visible}
-              onChange={(e) => upd({ visible: e.target.checked })}
-            />
-            Visible
+            <input type="checkbox" checked={selected.visible} onChange={(e) => upd({ visible: e.target.checked })} />
+            {t('visible')}
           </label>
         </div>
       </div>

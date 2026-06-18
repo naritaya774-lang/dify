@@ -1,4 +1,5 @@
 import { useSceneStore } from '../store/sceneStore'
+import { useLang } from '../i18n/useLang'
 
 const TYPE_ICONS: Record<string, string> = {
   box: '⬜', sphere: '⚪', cylinder: '🥫', cone: '🔺', torus: '⭕', plane: '▬',
@@ -6,16 +7,17 @@ const TYPE_ICONS: Record<string, string> = {
 
 export default function ObjectList() {
   const { objects, selectedId, selectObject, removeObject, updateObject } = useSceneStore()
+  const { t } = useLang()
 
   return (
     <div style={styles.panel}>
       <div style={styles.header}>
-        Scene Objects
+        {t('sceneObjects')}
         <span style={styles.count}>{objects.length}</span>
       </div>
       <div style={styles.list}>
         {objects.length === 0 && (
-          <div style={styles.empty}>No objects — add from toolbar</div>
+          <div style={styles.empty}>{t('noObjects')}</div>
         )}
         {objects.map((obj) => (
           <div
@@ -28,24 +30,19 @@ export default function ObjectList() {
             onClick={() => selectObject(obj.id)}
           >
             <span style={styles.icon}>{TYPE_ICONS[obj.type] ?? '◆'}</span>
-            <span
-              style={styles.name}
-              title={obj.name}
-            >
-              {obj.name}
-            </span>
+            <span style={styles.name} title={obj.name}>{obj.name}</span>
             <div style={styles.actions}>
               <button
                 style={styles.actionBtn}
                 onClick={(e) => { e.stopPropagation(); updateObject(obj.id, { visible: !obj.visible }) }}
-                title={obj.visible ? 'Hide' : 'Show'}
+                title={obj.visible ? t('hide') : t('show')}
               >
                 {obj.visible ? '👁' : '🚫'}
               </button>
               <button
                 style={{ ...styles.actionBtn, color: '#ff6b6b' }}
                 onClick={(e) => { e.stopPropagation(); removeObject(obj.id) }}
-                title="Delete"
+                title={t('delete')}
               >
                 ✕
               </button>
@@ -97,7 +94,6 @@ const styles: Record<string, React.CSSProperties> = {
     padding: '7px 10px',
     cursor: 'pointer',
     borderBottom: '1px solid #1a1a30',
-    transition: 'background 0.1s',
   },
   selected: { background: '#1a2a4a' },
   icon: { fontSize: 14, flexShrink: 0 },

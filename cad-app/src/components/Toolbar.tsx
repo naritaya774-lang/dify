@@ -1,25 +1,27 @@
 import { useSceneStore } from '../store/sceneStore'
+import { useLang } from '../i18n/useLang'
 import type { PrimitiveType, TransformMode } from '../types'
 
-const PRIMITIVES: { type: PrimitiveType; label: string; icon: string }[] = [
-  { type: 'box', label: 'Box', icon: '⬜' },
-  { type: 'sphere', label: 'Sphere', icon: '⚪' },
-  { type: 'cylinder', label: 'Cylinder', icon: '🥫' },
-  { type: 'cone', label: 'Cone', icon: '🔺' },
-  { type: 'torus', label: 'Torus', icon: '⭕' },
-  { type: 'plane', label: 'Plane', icon: '▬' },
-]
-
-const TRANSFORM_MODES: { mode: TransformMode; label: string; icon: string; shortcut: string }[] = [
-  { mode: 'translate', label: 'Move', icon: '✥', shortcut: 'G' },
-  { mode: 'rotate', label: 'Rotate', icon: '↻', shortcut: 'R' },
-  { mode: 'scale', label: 'Scale', icon: '⤡', shortcut: 'S' },
-]
+const PRIMITIVE_ICONS: Record<PrimitiveType, string> = {
+  box: '⬜', sphere: '⚪', cylinder: '🥫', cone: '🔺', torus: '⭕', plane: '▬',
+}
 
 export default function Toolbar() {
   const { addObject, transformMode, setTransformMode, selectedId, removeObject, duplicateObject,
     gridVisible, axesVisible, toggleGrid, toggleAxes, clearScene, objects, fileName } =
     useSceneStore()
+  const { t, lang, setLang } = useLang()
+
+  const PRIMITIVES: { type: PrimitiveType }[] = [
+    { type: 'box' }, { type: 'sphere' }, { type: 'cylinder' },
+    { type: 'cone' }, { type: 'torus' }, { type: 'plane' },
+  ]
+
+  const TRANSFORM_MODES: { mode: TransformMode; labelKey: 'move' | 'rotate' | 'scale'; icon: string; shortcut: string }[] = [
+    { mode: 'translate', labelKey: 'move', icon: '✥', shortcut: 'G' },
+    { mode: 'rotate', labelKey: 'rotate', icon: '↻', shortcut: 'R' },
+    { mode: 'scale', labelKey: 'scale', icon: '⤡', shortcut: 'S' },
+  ]
 
   const handleSave = async () => {
     const state = useSceneStore.getState()
@@ -50,26 +52,26 @@ export default function Toolbar() {
       {/* Title */}
       <div style={styles.brand}>
         <span style={styles.brandIcon}>◈</span>
-        <span style={styles.brandText}>Dify CAD</span>
+        <span style={styles.brandText}>{t('appName')}</span>
       </div>
 
       <div style={styles.divider} />
 
       {/* File ops */}
       <div style={styles.group}>
-        <button style={styles.btn} onClick={handleOpen} title="Open (Ctrl+O)">📂 Open</button>
-        <button style={styles.btn} onClick={handleSave} title="Save (Ctrl+S)">💾 Save</button>
+        <button style={styles.btn} onClick={handleOpen} title={`${t('open')} (Ctrl+O)`}>📂 {t('open')}</button>
+        <button style={styles.btn} onClick={handleSave} title={`${t('save')} (Ctrl+S)`}>💾 {t('save')}</button>
       </div>
 
       <div style={styles.divider} />
 
       {/* Add primitives */}
-      <div style={styles.groupLabel}>Add</div>
+      <div style={styles.groupLabel}>{t('add')}</div>
       <div style={styles.group}>
-        {PRIMITIVES.map(({ type, label, icon }) => (
-          <button key={type} style={styles.iconBtn} onClick={() => addObject(type)} title={`Add ${label}`}>
-            <span>{icon}</span>
-            <span style={styles.btnLabel}>{label}</span>
+        {PRIMITIVES.map(({ type }) => (
+          <button key={type} style={styles.iconBtn} onClick={() => addObject(type)} title={t(type)}>
+            <span>{PRIMITIVE_ICONS[type]}</span>
+            <span style={styles.btnLabel}>{t(type)}</span>
           </button>
         ))}
       </div>
@@ -77,17 +79,17 @@ export default function Toolbar() {
       <div style={styles.divider} />
 
       {/* Transform */}
-      <div style={styles.groupLabel}>Transform</div>
+      <div style={styles.groupLabel}>{t('transform')}</div>
       <div style={styles.group}>
-        {TRANSFORM_MODES.map(({ mode, label, icon, shortcut }) => (
+        {TRANSFORM_MODES.map(({ mode, labelKey, icon, shortcut }) => (
           <button
             key={mode}
             style={{ ...styles.iconBtn, ...(transformMode === mode ? styles.active : {}) }}
             onClick={() => setTransformMode(mode)}
-            title={`${label} [${shortcut}]`}
+            title={`${t(labelKey)} [${shortcut}]`}
           >
             <span style={{ fontSize: 18 }}>{icon}</span>
-            <span style={styles.btnLabel}>{label}</span>
+            <span style={styles.btnLabel}>{t(labelKey)}</span>
           </button>
         ))}
       </div>
@@ -95,48 +97,48 @@ export default function Toolbar() {
       <div style={styles.divider} />
 
       {/* Object actions */}
-      <div style={styles.groupLabel}>Object</div>
+      <div style={styles.groupLabel}>{t('object')}</div>
       <div style={styles.group}>
         <button
           style={{ ...styles.iconBtn, opacity: selectedId ? 1 : 0.4 }}
           disabled={!selectedId}
           onClick={() => selectedId && duplicateObject(selectedId)}
-          title="Duplicate"
+          title={t('duplicate')}
         >
           <span>⧉</span>
-          <span style={styles.btnLabel}>Dup</span>
+          <span style={styles.btnLabel}>{t('duplicate')}</span>
         </button>
         <button
           style={{ ...styles.iconBtn, opacity: selectedId ? 1 : 0.4 }}
           disabled={!selectedId}
           onClick={() => selectedId && removeObject(selectedId)}
-          title="Delete [Del]"
+          title={`${t('delete')} [Del]`}
         >
           <span>🗑</span>
-          <span style={styles.btnLabel}>Del</span>
+          <span style={styles.btnLabel}>{t('delete')}</span>
         </button>
       </div>
 
       <div style={styles.divider} />
 
       {/* View toggles */}
-      <div style={styles.groupLabel}>View</div>
+      <div style={styles.groupLabel}>{t('view')}</div>
       <div style={styles.group}>
         <button
           style={{ ...styles.iconBtn, ...(gridVisible ? styles.active : {}) }}
           onClick={toggleGrid}
-          title="Toggle Grid"
+          title={t('grid')}
         >
           <span>#</span>
-          <span style={styles.btnLabel}>Grid</span>
+          <span style={styles.btnLabel}>{t('grid')}</span>
         </button>
         <button
           style={{ ...styles.iconBtn, ...(axesVisible ? styles.active : {}) }}
           onClick={toggleAxes}
-          title="Toggle Axes"
+          title={t('axes')}
         >
           <span>⊹</span>
-          <span style={styles.btnLabel}>Axes</span>
+          <span style={styles.btnLabel}>{t('axes')}</span>
         </button>
       </div>
 
@@ -144,16 +146,26 @@ export default function Toolbar() {
 
       {/* Status */}
       <div style={styles.status}>
-        <span style={styles.statusText}>Objects: {objects.length}</span>
-        {selectedId && <span style={styles.statusActive}>● Selected</span>}
+        <span style={styles.statusText}>{t('objects')}: {objects.length}</span>
+        {selectedId && <span style={styles.statusActive}>{t('selected')}</span>}
       </div>
+
+      {/* Language toggle */}
+      <div style={styles.divider} />
+      <button
+        style={{ ...styles.langBtn, ...(lang === 'ja' ? styles.active : {}) }}
+        onClick={() => setLang(lang === 'ja' ? 'en' : 'ja')}
+        title="Switch language / 言語切替"
+      >
+        {lang === 'ja' ? '🇯🇵 日本語' : '🇺🇸 English'}
+      </button>
 
       <button
         style={{ ...styles.btn, color: '#ff6b6b', marginLeft: 8 }}
-        onClick={() => { if (confirm('Clear all objects?')) clearScene() }}
-        title="Clear scene"
+        onClick={() => { if (confirm(t('clearConfirm'))) clearScene() }}
+        title={t('clearScene')}
       >
-        Clear
+        {t('clearScene')}
       </button>
     </div>
   )
@@ -172,12 +184,7 @@ const styles: Record<string, React.CSSProperties> = {
     userSelect: 'none',
     overflowX: 'auto',
   },
-  brand: {
-    display: 'flex',
-    alignItems: 'center',
-    gap: 6,
-    marginRight: 4,
-  },
+  brand: { display: 'flex', alignItems: 'center', gap: 6, marginRight: 4 },
   brandIcon: { fontSize: 22, color: '#4a9eff' },
   brandText: { fontSize: 15, fontWeight: 700, color: '#e0e0ff', letterSpacing: 1 },
   divider: { width: 1, height: 32, background: '#2a2a4a', margin: '0 6px', flexShrink: 0 },
@@ -204,8 +211,18 @@ const styles: Record<string, React.CSSProperties> = {
     padding: '3px 8px',
     cursor: 'pointer',
     fontSize: 14,
-    minWidth: 40,
+    minWidth: 42,
     gap: 1,
+  },
+  langBtn: {
+    background: '#1e1e3a',
+    border: '1px solid #2a2a4a',
+    borderRadius: 5,
+    color: '#c0c0e0',
+    padding: '4px 10px',
+    cursor: 'pointer',
+    fontSize: 11,
+    whiteSpace: 'nowrap',
   },
   active: {
     background: '#1a3a6a',
