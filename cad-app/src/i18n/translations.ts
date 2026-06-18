@@ -125,6 +125,7 @@ export const translations = {
     // Shortcuts
     shortcuts: 'Shortcuts',
     close: 'Close',
+    tutorial: 'Tutorial',
     // Align
     align: 'Align',
     // Macro
@@ -273,6 +274,7 @@ export const translations = {
     // Shortcuts
     shortcuts: 'ショートカット',
     close: '閉じる',
+    tutorial: 'チュートリアル',
     // Align
     align: '整列',
     // Macro

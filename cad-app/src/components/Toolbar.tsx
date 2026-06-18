@@ -8,6 +8,7 @@ import AlignDialog from './AlignDialog'
 import ShortcutsDialog from './ShortcutsDialog'
 import MacroPanel from './MacroPanel'
 import PythonPanel from './PythonPanel'
+import TutorialOverlay from './TutorialOverlay'
 import { useMacroStore } from '../store/macroStore'
 import type { BooleanOp, PrimitiveType, TransformMode } from '../types'
 
@@ -39,6 +40,7 @@ export default function Toolbar() {
   const [showShortcuts, setShowShortcuts] = useState(false)
   const [showMacroPanel, setShowMacroPanel] = useState(false)
   const [showPythonPanel, setShowPythonPanel] = useState(false)
+  const [showTutorial, setShowTutorial] = useState(() => !localStorage.getItem('cad-tutorial-done'))
   const [recordingName, setRecordingName] = useState('')
   const stlInputRef = useRef<HTMLInputElement>(null)
   const objInputRef = useRef<HTMLInputElement>(null)
@@ -355,6 +357,10 @@ export default function Toolbar() {
         <span style={{ fontSize: 14 }}>⌨</span>
         <span style={styles.btnLabel}>{t('shortcuts')}</span>
       </button>
+      <button style={styles.iconBtn} onClick={() => setShowTutorial(true)} title={t('tutorial')}>
+        <span style={{ fontSize: 14 }}>📖</span>
+        <span style={styles.btnLabel}>{t('tutorial')}</span>
+      </button>
       <div style={styles.divider} />
       <button style={{ ...styles.langBtn }} onClick={() => setLang(lang === 'ja' ? 'en' : 'ja')} title="Switch language">
         {lang === 'ja' ? '🇯🇵 日本語' : '🇺🇸 English'}
@@ -385,6 +391,9 @@ export default function Toolbar() {
       )}
       {showPythonPanel && (
         <PythonPanel onClose={() => setShowPythonPanel(false)} />
+      )}
+      {showTutorial && (
+        <TutorialOverlay onClose={() => setShowTutorial(false)} />
       )}
     </div>
   )
