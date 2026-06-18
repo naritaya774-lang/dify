@@ -87,6 +87,15 @@ export default function Viewport3D() {
   const sketchGroupRef = useRef<THREE.Group | null>(null)
   const rafRef = useRef<number>(0)
   const csgEvalRef = useRef(new Evaluator())
+  const raycasterRef = useRef(new THREE.Raycaster())
+
+  type InteractionState =
+    | { kind: 'idle' }
+    | { kind: 'empty'; startX: number; startY: number }
+    | { kind: 'gizmo' }
+    | { kind: 'object'; id: string; startX: number; startY: number; plane: THREE.Plane; offset: THREE.Vector3; moved: boolean }
+
+  const interactionRef = useRef<InteractionState>({ kind: 'idle' })
 
   const { objects, selectedIds, transformMode, gridVisible, axesVisible, selectObject, updateObject } = useSceneStore()
   const { active: sketchActive, mode: sketchMode, shapes, currentPoints, mousePos } = useSketchStore()
@@ -345,7 +354,7 @@ export default function Viewport3D() {
     }
   }, [updateObject])
 
-  // Sketch mouse events
+  // Sketch pointer events (mouse + touch unified)
   useEffect(() => {
     const domEl = rendererRef.current?.domElement
     const camera = cameraRef.current
@@ -354,7 +363,8 @@ export default function Viewport3D() {
     if (!sketchActive) { if (orbit) orbit.enabled = true; return }
     if (orbit) orbit.enabled = false
 
-    let mdX = 0; let mdY = 0
+    let pdX = 0; let pdY = 0
+    let lastTapTime = 0; let lastTapX = 0; let lastTapY = 0
 
     const project = (clientX: number, clientY: number): Pt2 | null => {
       const rect = domEl.getBoundingClientRect()
@@ -369,24 +379,32 @@ export default function Viewport3D() {
       return sketchMode === 'extrude' ? { x: target.x, y: target.z } : { x: target.x, y: target.y }
     }
 
-    const onMD = (e: MouseEvent) => { mdX = e.clientX; mdY = e.clientY }
-    const onMM = (e: MouseEvent) => { const p = project(e.clientX, e.clientY); if (p) useSketchStore.getState().setMousePos(p) }
-    const onCL = (e: MouseEvent) => {
-      if (Math.hypot(e.clientX - mdX, e.clientY - mdY) > 5) return
+    const onPD = (e: PointerEvent) => { pdX = e.clientX; pdY = e.clientY }
+    const onPM = (e: PointerEvent) => {
+      if (!e.isPrimary) return
       const p = project(e.clientX, e.clientY)
-      if (p) useSketchStore.getState().addPoint(p)
+      if (p) useSketchStore.getState().setMousePos(p)
     }
-    const onDBL = (e: MouseEvent) => { useSketchStore.getState().closeShape(); e.preventDefault() }
+    const onPU = (e: PointerEvent) => {
+      if (!e.isPrimary || Math.hypot(e.clientX - pdX, e.clientY - pdY) > 5) return
+      const now = Date.now()
+      if (now - lastTapTime < 300 && Math.hypot(e.clientX - lastTapX, e.clientY - lastTapY) < 20) {
+        useSketchStore.getState().closeShape()
+        lastTapTime = 0
+      } else {
+        const p = project(e.clientX, e.clientY)
+        if (p) useSketchStore.getState().addPoint(p)
+        lastTapTime = now; lastTapX = e.clientX; lastTapY = e.clientY
+      }
+    }
 
-    domEl.addEventListener('mousedown', onMD)
-    domEl.addEventListener('mousemove', onMM)
-    domEl.addEventListener('click', onCL)
-    domEl.addEventListener('dblclick', onDBL)
+    domEl.addEventListener('pointerdown', onPD)
+    domEl.addEventListener('pointermove', onPM)
+    domEl.addEventListener('pointerup', onPU)
     return () => {
-      domEl.removeEventListener('mousedown', onMD)
-      domEl.removeEventListener('mousemove', onMM)
-      domEl.removeEventListener('click', onCL)
-      domEl.removeEventListener('dblclick', onDBL)
+      domEl.removeEventListener('pointerdown', onPD)
+      domEl.removeEventListener('pointermove', onPM)
+      domEl.removeEventListener('pointerup', onPU)
       if (orbit) orbit.enabled = true
     }
   }, [sketchActive, sketchMode])
@@ -524,26 +542,112 @@ export default function Viewport3D() {
   useEffect(() => { if (gridRef.current) gridRef.current.visible = gridVisible }, [gridVisible])
   useEffect(() => { if (axesRef.current) axesRef.current.visible = axesVisible }, [axesVisible])
 
-  const handleClick = useCallback(
-    (e: React.MouseEvent<HTMLDivElement>) => {
-      if (useSketchStore.getState().active) return
-      const mount = mountRef.current; const camera = cameraRef.current; const scene = sceneRef.current
-      if (!mount || !camera || !scene) return
-      const rect = mount.getBoundingClientRect()
-      const x = ((e.clientX - rect.left) / rect.width) * 2 - 1
-      const y = -((e.clientY - rect.top) / rect.height) * 2 + 1
-      const raycaster = new THREE.Raycaster()
-      raycaster.setFromCamera(new THREE.Vector2(x, y), camera)
-      const meshes = Array.from(meshMapRef.current.values())
-      const hits = raycaster.intersectObjects(meshes)
-      if (hits.length > 0) selectObject(hits[0].object.userData.cadId as string, e.shiftKey)
-      else if (!e.shiftKey) selectObject(null)
-    },
-    [selectObject],
-  )
+  const handlePointerDown = useCallback((e: React.PointerEvent<HTMLDivElement>) => {
+    if (useSketchStore.getState().active) return
+    const mount = mountRef.current; const camera = cameraRef.current
+    if (!mount || !camera) return
+
+    const rect = mount.getBoundingClientRect()
+    const nx = ((e.clientX - rect.left) / rect.width) * 2 - 1
+    const ny = -((e.clientY - rect.top) / rect.height) * 2 + 1
+    raycasterRef.current.setFromCamera(new THREE.Vector2(nx, ny), camera)
+
+    // If TC gizmo is hit, let TransformControls handle it
+    const tc = transformRef.current
+    if (tc?.object) {
+      const gizmoHits = raycasterRef.current.intersectObjects(tc.children, true)
+      if (gizmoHits.length > 0) { interactionRef.current = { kind: 'gizmo' }; return }
+    }
+
+    const meshes = Array.from(meshMapRef.current.values())
+    const hits = raycasterRef.current.intersectObjects(meshes)
+
+    if (hits.length === 0) {
+      interactionRef.current = { kind: 'empty', startX: e.clientX, startY: e.clientY }
+      return
+    }
+
+    const hitId = hits[0].object.userData.cadId as string
+    const obj = useSceneStore.getState().objects.find((o) => o.id === hitId)
+    if (!obj) return
+
+    e.currentTarget.setPointerCapture(e.pointerId)
+    if (orbitRef.current) orbitRef.current.enabled = false
+
+    const plane = new THREE.Plane(new THREE.Vector3(0, 1, 0), -obj.position.y)
+    const projected = new THREE.Vector3()
+    if (!raycasterRef.current.ray.intersectPlane(plane, projected)) projected.copy(hits[0].point)
+
+    interactionRef.current = {
+      kind: 'object',
+      id: hitId,
+      startX: e.clientX,
+      startY: e.clientY,
+      plane,
+      offset: new THREE.Vector3(obj.position.x - projected.x, 0, obj.position.z - projected.z),
+      moved: false,
+    }
+  }, [])
+
+  const handlePointerMove = useCallback((e: React.PointerEvent<HTMLDivElement>) => {
+    const state = interactionRef.current
+    if (state.kind !== 'object') return
+    if (transformRef.current?.dragging) { interactionRef.current = { kind: 'idle' }; return }
+
+    if (!state.moved && Math.hypot(e.clientX - state.startX, e.clientY - state.startY) < 6) return
+
+    const mount = mountRef.current; const camera = cameraRef.current
+    if (!mount || !camera) return
+
+    if (!state.moved) {
+      state.moved = true
+      useSceneStore.getState()._snapshot()
+    }
+
+    const rect = mount.getBoundingClientRect()
+    const nx = ((e.clientX - rect.left) / rect.width) * 2 - 1
+    const ny = -((e.clientY - rect.top) / rect.height) * 2 + 1
+    raycasterRef.current.setFromCamera(new THREE.Vector2(nx, ny), camera)
+
+    const target = new THREE.Vector3()
+    if (!raycasterRef.current.ray.intersectPlane(state.plane, target)) return
+
+    const obj = useSceneStore.getState().objects.find((o) => o.id === state.id)
+    if (!obj) return
+
+    useSceneStore.getState().updateObject(state.id, {
+      position: { x: target.x + state.offset.x, y: obj.position.y, z: target.z + state.offset.z },
+    })
+  }, [])
+
+  const handlePointerUp = useCallback((e: React.PointerEvent<HTMLDivElement>) => {
+    const state = interactionRef.current
+    interactionRef.current = { kind: 'idle' }
+
+    if (state.kind === 'object') {
+      e.currentTarget.releasePointerCapture(e.pointerId)
+      if (!transformRef.current?.dragging && orbitRef.current) orbitRef.current.enabled = true
+      if (!state.moved) selectObject(state.id, e.shiftKey)
+    } else if (state.kind === 'empty') {
+      if (Math.hypot(e.clientX - state.startX, e.clientY - state.startY) < 8 && !e.shiftKey)
+        selectObject(null)
+    }
+  }, [selectObject])
+
+  const handlePointerCancel = useCallback(() => {
+    const state = interactionRef.current
+    interactionRef.current = { kind: 'idle' }
+    if (state.kind === 'object' && orbitRef.current) orbitRef.current.enabled = true
+  }, [])
 
   return (
-    <div ref={mountRef} onClick={handleClick}
-      style={{ width: '100%', height: '100%', cursor: sketchActive ? 'crosshair' : 'default' }} />
+    <div
+      ref={mountRef}
+      onPointerDown={handlePointerDown}
+      onPointerMove={handlePointerMove}
+      onPointerUp={handlePointerUp}
+      onPointerCancel={handlePointerCancel}
+      style={{ width: '100%', height: '100%', cursor: sketchActive ? 'crosshair' : 'default', touchAction: 'none' }}
+    />
   )
 }
