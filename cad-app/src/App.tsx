@@ -63,6 +63,7 @@ const styles: Record<string, React.CSSProperties> = {
     display: 'flex',
     flex: 1,
     overflow: 'hidden',
+    height: '100vh',
   },
   viewport: {
     flex: 1,

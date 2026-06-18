@@ -44,6 +44,37 @@ export default function Toolbar() {
   const [recordingName, setRecordingName] = useState('')
   const stlInputRef = useRef<HTMLInputElement>(null)
   const objInputRef = useRef<HTMLInputElement>(null)
+  const [toolbarPos, setToolbarPos] = useState<{ x: number; y: number }>(() => {
+    try {
+      const s = localStorage.getItem('cad-toolbar-pos')
+      return s ? JSON.parse(s) : { x: 0, y: 0 }
+    } catch { return { x: 0, y: 0 } }
+  })
+  const dragRef = useRef<{ startX: number; startY: number; origX: number; origY: number } | null>(null)
+
+  const onHandlePD = (e: React.PointerEvent<HTMLDivElement>) => {
+    e.currentTarget.setPointerCapture(e.pointerId)
+    dragRef.current = { startX: e.clientX, startY: e.clientY, origX: toolbarPos.x, origY: toolbarPos.y }
+    document.body.style.cursor = 'grabbing'
+  }
+  const onHandlePM = (e: React.PointerEvent<HTMLDivElement>) => {
+    if (!dragRef.current) return
+    setToolbarPos({
+      x: dragRef.current.origX + e.clientX - dragRef.current.startX,
+      y: dragRef.current.origY + e.clientY - dragRef.current.startY,
+    })
+  }
+  const onHandlePU = (e: React.PointerEvent<HTMLDivElement>) => {
+    if (!dragRef.current) return
+    const finalPos = {
+      x: dragRef.current.origX + e.clientX - dragRef.current.startX,
+      y: dragRef.current.origY + e.clientY - dragRef.current.startY,
+    }
+    setToolbarPos(finalPos)
+    localStorage.setItem('cad-toolbar-pos', JSON.stringify(finalPos))
+    dragRef.current = null
+    document.body.style.cursor = ''
+  }
   const { recording, startRecording, stopRecording, cancelRecording, macros } = useMacroStore()
 
   const handleStopRecording = () => {
@@ -82,13 +113,21 @@ export default function Toolbar() {
   const hasSelection = selectedIds.length > 0
 
   return (
-    <div style={styles.toolbar}>
+    <div style={{ ...styles.toolbar, left: toolbarPos.x, top: toolbarPos.y }}>
       {/* Row 1: Brand | File | Undo/Redo | Camera | Grid/Axes | spacer | Tutorial/Shortcuts | Lang | Clear */}
       <div style={styles.row}>
-        {/* Brand */}
-        <div style={styles.brand}>
+        {/* Brand / Drag handle */}
+        <div
+          style={{ ...styles.brand, cursor: 'grab', touchAction: 'none' }}
+          onPointerDown={onHandlePD}
+          onPointerMove={onHandlePM}
+          onPointerUp={onHandlePU}
+          onPointerCancel={onHandlePU}
+          title="Drag to move toolbar"
+        >
           <span style={styles.brandIcon}>◈</span>
           <span style={styles.brandText}>{t('appName')}</span>
+          <span style={{ fontSize: 11, color: '#333355', marginLeft: 2, lineHeight: 1 }}>⠿</span>
         </div>
         <div style={styles.divider} />
 
@@ -405,8 +444,11 @@ const styles: Record<string, React.CSSProperties> = {
     display: 'flex',
     flexDirection: 'column',
     background: '#12122a',
-    borderBottom: '1px solid #2a2a4a',
-    flexShrink: 0,
+    border: '1px solid #2a2a4a',
+    borderRadius: 8,
+    boxShadow: '0 4px 24px rgba(0,0,0,0.7)',
+    position: 'fixed',
+    zIndex: 100,
     userSelect: 'none',
   },
   row: {
