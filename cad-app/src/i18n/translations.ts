@@ -127,6 +127,12 @@ export const translations = {
     close: 'Close',
     // Align
     align: 'Align',
+    // Macro
+    macro: 'Macro',
+    macros: 'Macros',
+    record: 'Record',
+    stopRecord: 'Stop',
+    recording: 'Recording...',
   },
   ja: {
     appName: 'Dify CAD',
@@ -254,6 +260,12 @@ export const translations = {
     close: '閉じる',
     // Align
     align: '整列',
+    // Macro
+    macro: 'マクロ',
+    macros: '一覧',
+    record: '録画',
+    stopRecord: '停止',
+    recording: '録画中...',
   },
 } as const
 

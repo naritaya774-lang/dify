@@ -6,6 +6,8 @@ import { viewportActions } from './Viewport3D'
 import ArrayDialog from './ArrayDialog'
 import AlignDialog from './AlignDialog'
 import ShortcutsDialog from './ShortcutsDialog'
+import MacroPanel from './MacroPanel'
+import { useMacroStore } from '../store/macroStore'
 import type { BooleanOp, PrimitiveType, TransformMode } from '../types'
 
 const PRIMITIVE_ICONS: Record<PrimitiveType, string> = {
@@ -34,8 +36,17 @@ export default function Toolbar() {
   const [showArrayDialog, setShowArrayDialog] = useState(false)
   const [showAlignDialog, setShowAlignDialog] = useState(false)
   const [showShortcuts, setShowShortcuts] = useState(false)
+  const [showMacroPanel, setShowMacroPanel] = useState(false)
+  const [recordingName, setRecordingName] = useState('')
   const stlInputRef = useRef<HTMLInputElement>(null)
   const objInputRef = useRef<HTMLInputElement>(null)
+  const { recording, startRecording, stopRecording, cancelRecording, macros } = useMacroStore()
+
+  const handleStopRecording = () => {
+    const name = recordingName.trim() || (lang === 'ja' ? `マクロ${macros.length + 1}` : `Macro ${macros.length + 1}`)
+    stopRecording(name)
+    setRecordingName('')
+  }
 
   const PRIMITIVES: PrimitiveType[] = ['box', 'sphere', 'cylinder', 'cone', 'torus', 'plane']
 
@@ -74,6 +85,39 @@ export default function Toolbar() {
         <span style={styles.brandText}>{t('appName')}</span>
       </div>
       <div style={styles.divider} />
+
+      {/* Macro recording */}
+      {recording ? (
+        <div style={styles.recGroup}>
+          <span style={styles.recDot}>⏺</span>
+          <input
+            style={styles.recInput}
+            value={recordingName}
+            onChange={(e) => setRecordingName(e.target.value)}
+            placeholder={lang === 'ja' ? 'マクロ名...' : 'Macro name...'}
+          />
+          <button style={styles.stopBtn} onClick={handleStopRecording}>⏹ {t('stopRecord')}</button>
+          <button style={styles.cancelRecBtn} onClick={cancelRecording}>✕</button>
+        </div>
+      ) : (
+        <>
+          <div style={styles.groupLabel}>{t('macro')}</div>
+          <div style={styles.group}>
+            <button style={styles.iconBtn} onClick={startRecording} title={t('record')}>
+              <span style={{ fontSize: 13, color: '#ff6b6b' }}>⏺</span>
+              <span style={styles.btnLabel}>{t('record')}</span>
+            </button>
+            <button style={{ ...styles.iconBtn, position: 'relative' }} onClick={() => setShowMacroPanel(true)} title={t('macros')}>
+              <span style={{ fontSize: 13 }}>📋</span>
+              <span style={styles.btnLabel}>{t('macros')}</span>
+              {macros.length > 0 && (
+                <span style={styles.macroBadge}>{macros.length}</span>
+              )}
+            </button>
+          </div>
+          <div style={styles.divider} />
+        </>
+      )}
 
       {/* File */}
       <div style={styles.group}>
@@ -330,6 +374,9 @@ export default function Toolbar() {
       {showShortcuts && (
         <ShortcutsDialog onClose={() => setShowShortcuts(false)} />
       )}
+      {showMacroPanel && (
+        <MacroPanel onClose={() => setShowMacroPanel(false)} />
+      )}
     </div>
   )
 }
@@ -392,4 +439,10 @@ const styles: Record<string, React.CSSProperties> = {
   status: { display: 'flex', alignItems: 'center', gap: 8, fontSize: 11 },
   statusText: { color: '#666688' },
   statusActive: { color: '#51cf66', fontWeight: 600 },
+  recGroup: { display: 'flex', alignItems: 'center', gap: 6, background: '#2a1a1a', border: '1px solid #8a2a2a', borderRadius: 6, padding: '3px 8px' },
+  recDot: { color: '#ff4444', fontSize: 14, animation: 'pulse 1s ease-in-out infinite', flexShrink: 0 },
+  recInput: { background: 'transparent', border: 'none', color: '#ff9999', fontSize: 12, outline: 'none', width: 120, placeholder: 'Macro name...' },
+  stopBtn: { background: '#3a1a1a', border: '1px solid #ff4444', borderRadius: 5, color: '#ff6b6b', padding: '3px 8px', cursor: 'pointer', fontSize: 11, whiteSpace: 'nowrap' },
+  cancelRecBtn: { background: 'none', border: 'none', color: '#8888aa', cursor: 'pointer', fontSize: 14, padding: 2 },
+  macroBadge: { position: 'absolute', top: 1, right: 1, background: '#4a9eff', color: '#000', borderRadius: '50%', width: 14, height: 14, fontSize: 9, display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: 700 },
 }

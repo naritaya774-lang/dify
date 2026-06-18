@@ -9,6 +9,7 @@ import { OBJLoader } from 'three/examples/jsm/loaders/OBJLoader.js'
 import { mergeGeometries } from 'three/examples/jsm/utils/BufferGeometryUtils.js'
 import { ADDITION, SUBTRACTION, INTERSECTION, Evaluator } from 'three-bvh-csg'
 import { useSceneStore } from '../store/sceneStore'
+import { macroRecord } from '../store/macroRecorder'
 import { useSketchStore } from '../store/sketchStore'
 import type { BooleanOp, CADObject, GeometryParams, Pt2, PrimitiveType } from '../types'
 
@@ -126,6 +127,14 @@ export default function Viewport3D() {
     const transform = new TransformControls(camera, renderer.domElement)
     transform.addEventListener('mouseDown', () => {
       useSceneStore.getState()._snapshot()
+    })
+    transform.addEventListener('mouseUp', () => {
+      if (!macroRecord.active()) return
+      const ids = useSceneStore.getState().selectedIds
+      if (ids.length === 0) return
+      const obj = useSceneStore.getState().objects.find((o) => o.id === ids[0])
+      if (!obj) return
+      macroRecord.emit({ type: 'update', vid: macroRecord.getVid(obj.id), position: { ...obj.position }, rotation: { ...obj.rotation }, scale: { ...obj.scale } })
     })
     transform.addEventListener('dragging-changed', (e) => {
       orbit.enabled = !(e as { value: boolean }).value

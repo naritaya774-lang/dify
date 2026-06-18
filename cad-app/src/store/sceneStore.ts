@@ -2,6 +2,7 @@ import { create } from 'zustand'
 import { CADObject, GeometryParams, PrimitiveType, SceneState, TransformMode, Vec3, ViewMode } from '../types'
 import { useLang } from '../i18n/useLang'
 import type { TranslationKey } from '../i18n/translations'
+import { macroRecord } from './macroRecorder'
 
 interface SceneActions {
   addObject: (type: PrimitiveType) => void
@@ -92,9 +93,15 @@ export const useSceneStore = create<SceneState & SceneActions>((set, get) => ({
       params: defaultParams(type),
     }
     set((s) => ({ objects: [...s.objects, obj], selectedIds: [obj.id] }))
+    if (macroRecord.active()) {
+      macroRecord.emit({ type: 'add', vid: macroRecord.getVid(obj.id), primitiveType: type, name: obj.name, position: { ...obj.position }, rotation: { ...obj.rotation }, scale: { ...obj.scale }, color: obj.color, params: { ...obj.params } })
+    }
   },
 
   removeObject: (id) => {
+    if (macroRecord.active()) {
+      macroRecord.emit({ type: 'delete', vid: macroRecord.getVid(id) })
+    }
     takeSnapshot(get())
     set((s) => ({
       objects: s.objects.filter((o) => o.id !== id),
@@ -131,6 +138,9 @@ export const useSceneStore = create<SceneState & SceneActions>((set, get) => ({
         o.id === id ? { ...o, params: { ...o.params, ...params } } : o
       ),
     }))
+    if (macroRecord.active()) {
+      macroRecord.emit({ type: 'params', vid: macroRecord.getVid(id), params })
+    }
   },
 
   setTransformMode: (mode) => set({ transformMode: mode }),
@@ -151,6 +161,9 @@ export const useSceneStore = create<SceneState & SceneActions>((set, get) => ({
       params: { ...obj.params },
     }
     set((s) => ({ objects: [...s.objects, copy], selectedIds: [copy.id] }))
+    if (macroRecord.active()) {
+      macroRecord.emit({ type: 'duplicate', sourceVid: macroRecord.getVid(id), newVid: macroRecord.getVid(copy.id) })
+    }
   },
 
   clearScene: () => { takeSnapshot(get()); set({ objects: [], selectedIds: [] }) },
@@ -177,6 +190,9 @@ export const useSceneStore = create<SceneState & SceneActions>((set, get) => ({
       })
     }
     set((s) => ({ objects: [...s.objects, ...copies] }))
+    if (macroRecord.active()) {
+      macroRecord.emit({ type: 'linearArray', vid: macroRecord.getVid(id), axis, count, spacing, newVids: copies.map((c) => macroRecord.getVid(c.id)) })
+    }
   },
 
   circularArray: (id, _axis, count, radius) => {
@@ -197,6 +213,9 @@ export const useSceneStore = create<SceneState & SceneActions>((set, get) => ({
       })
     }
     set((s) => ({ objects: [...s.objects, ...copies] }))
+    if (macroRecord.active()) {
+      macroRecord.emit({ type: 'circularArray', vid: macroRecord.getVid(id), count, radius, newVids: copies.map((c) => macroRecord.getVid(c.id)) })
+    }
   },
 
   mirrorObject: (id, axis) => {
@@ -228,6 +247,9 @@ export const useSceneStore = create<SceneState & SceneActions>((set, get) => ({
       params: { ...obj.params },
     }
     set((s) => ({ objects: [...s.objects, mirror] }))
+    if (macroRecord.active()) {
+      macroRecord.emit({ type: 'mirror', vid: macroRecord.getVid(id), axis, newVid: macroRecord.getVid(mirror.id) })
+    }
   },
 
   undo: () => {
