@@ -7,19 +7,13 @@ import { OBJExporter } from 'three/examples/jsm/exporters/OBJExporter.js'
 import { ADDITION, SUBTRACTION, INTERSECTION, Evaluator } from 'three-bvh-csg'
 import { useSceneStore } from '../store/sceneStore'
 import { useSketchStore } from '../store/sketchStore'
-import type { BooleanOp, CADObject, GeometryParams, PrimitiveType } from '../types'
+import type { BooleanOp, CADObject, GeometryParams, Pt2, PrimitiveType } from '../types'
 
-// exposed for Toolbar / SketchPanel to call
 export const viewportActions = {
   exportSTL: null as (() => void) | null,
   exportOBJ: null as (() => void) | null,
   booleanOp: null as ((op: BooleanOp) => void) | null,
   commitSketch: null as (() => void) | null,
-}
-
-export const viewportRefs: { camera: THREE.PerspectiveCamera | null; mount: HTMLDivElement | null } = {
-  camera: null,
-  mount: null,
 }
 
 export function buildGeometry(type: PrimitiveType | 'boolean' | 'custom', p: GeometryParams): THREE.BufferGeometry {
@@ -56,8 +50,22 @@ function applyTransform(mesh: THREE.Mesh, obj: CADObject) {
   mat.wireframe = obj.wireframe
 }
 
+function clearGroup(group: THREE.Group) {
+  while (group.children.length > 0) {
+    const child = group.children[0] as THREE.Mesh | THREE.Line
+    group.remove(child)
+    if ('geometry' in child && child.geometry) child.geometry.dispose()
+    if ('material' in child) {
+      const mat = (child as THREE.Mesh).material as THREE.Material | THREE.Material[]
+      if (Array.isArray(mat)) mat.forEach((m) => m.dispose())
+      else mat.dispose()
+    }
+  }
+}
+
 const OUTLINE_COLOR = 0xffffff
 const SELECT_COLOR = 0x4a9eff
+const COLORS_LIST = ['#4a9eff', '#ff6b6b', '#51cf66', '#ffd43b', '#cc5de8', '#ff922b', '#20c997', '#74c0fc']
 
 export default function Viewport3D() {
   const mountRef = useRef<HTMLDivElement>(null)
@@ -70,20 +78,13 @@ export default function Viewport3D() {
   const outlineMapRef = useRef<Map<string, THREE.Mesh>>(new Map())
   const gridRef = useRef<THREE.GridHelper | null>(null)
   const axesRef = useRef<THREE.AxesHelper | null>(null)
+  const sketchGroupRef = useRef<THREE.Group | null>(null)
   const rafRef = useRef<number>(0)
   const csgEvalRef = useRef(new Evaluator())
-  const sketchGroupRef = useRef<THREE.Group | null>(null)
-  const sketchPlaneRef = useRef<THREE.Mesh | null>(null)
-  // drag detection
-  const mouseDownPosRef = useRef<{ x: number; y: number } | null>(null)
 
-  const store = useSceneStore()
-  const { objects, selectedIds, transformMode, gridVisible, axesVisible,
-    selectObject, updateObject } = store
+  const { objects, selectedIds, transformMode, gridVisible, axesVisible, selectObject, updateObject } = useSceneStore()
+  const { active: sketchActive, mode: sketchMode, shapes, currentPoints, mousePos } = useSketchStore()
 
-  const sketchStore = useSketchStore()
-
-  // init Three.js
   useEffect(() => {
     const mount = mountRef.current!
     const renderer = new THREE.WebGLRenderer({ antialias: true })
@@ -99,30 +100,22 @@ export default function Viewport3D() {
     sceneRef.current = scene
 
     const grid = new THREE.GridHelper(20, 20, 0x444466, 0x333355)
-    scene.add(grid)
-    gridRef.current = grid
+    scene.add(grid); gridRef.current = grid
 
     const axes = new THREE.AxesHelper(5)
-    scene.add(axes)
-    axesRef.current = axes
+    scene.add(axes); axesRef.current = axes
 
     scene.add(new THREE.AmbientLight(0xffffff, 0.4))
     const dir = new THREE.DirectionalLight(0xffffff, 0.8)
-    dir.position.set(10, 20, 10)
-    dir.castShadow = true
-    scene.add(dir)
+    dir.position.set(10, 20, 10); dir.castShadow = true; scene.add(dir)
     scene.add(new THREE.HemisphereLight(0x4466ff, 0x224422, 0.3))
 
     const camera = new THREE.PerspectiveCamera(60, mount.clientWidth / mount.clientHeight, 0.01, 1000)
-    camera.position.set(5, 5, 5)
-    camera.lookAt(0, 0, 0)
+    camera.position.set(5, 5, 5); camera.lookAt(0, 0, 0)
     cameraRef.current = camera
-    viewportRefs.camera = camera
-    viewportRefs.mount = mount
 
     const orbit = new OrbitControls(camera, renderer.domElement)
-    orbit.enableDamping = true
-    orbit.dampingFactor = 0.05
+    orbit.enableDamping = true; orbit.dampingFactor = 0.05
     orbitRef.current = orbit
 
     const transform = new TransformControls(camera, renderer.domElement)
@@ -139,25 +132,18 @@ export default function Viewport3D() {
         scale: { x: obj.scale.x, y: obj.scale.y, z: obj.scale.z },
       })
     })
-    scene.add(transform)
-    transformRef.current = transform
+    scene.add(transform); transformRef.current = transform
 
-    // Sketch group
     const sketchGroup = new THREE.Group()
-    scene.add(sketchGroup)
-    sketchGroupRef.current = sketchGroup
+    scene.add(sketchGroup); sketchGroupRef.current = sketchGroup
 
-    // Export actions
     viewportActions.exportSTL = () => {
       const exporter = new STLExporter()
       const group = new THREE.Group()
       meshMapRef.current.forEach((m) => { if (m.visible) group.add(m.clone()) })
       const data = exporter.parse(group, { binary: true }) as ArrayBuffer
       const blob = new Blob([data], { type: 'application/octet-stream' })
-      const a = document.createElement('a')
-      a.href = URL.createObjectURL(blob)
-      a.download = 'model.stl'
-      a.click()
+      const a = document.createElement('a'); a.href = URL.createObjectURL(blob); a.download = 'model.stl'; a.click()
     }
 
     viewportActions.exportOBJ = () => {
@@ -166,10 +152,7 @@ export default function Viewport3D() {
       meshMapRef.current.forEach((m) => { if (m.visible) group.add(m.clone()) })
       const data = exporter.parse(group)
       const blob = new Blob([data], { type: 'text/plain' })
-      const a = document.createElement('a')
-      a.href = URL.createObjectURL(blob)
-      a.download = 'model.obj'
-      a.click()
+      const a = document.createElement('a'); a.href = URL.createObjectURL(blob); a.download = 'model.obj'; a.click()
     }
 
     viewportActions.booleanOp = (op: BooleanOp) => {
@@ -180,380 +163,220 @@ export default function Viewport3D() {
       const meshA = meshMapRef.current.get(aId)
       const meshB = meshMapRef.current.get(bId)
       if (!meshA || !meshB) return
-
       const opMap = { union: ADDITION, subtract: SUBTRACTION, intersect: INTERSECTION }
       try {
-        const evaluator = csgEvalRef.current
-        const cloneA = meshA.clone()
-        const cloneB = meshB.clone()
-        cloneA.updateMatrixWorld(true)
-        cloneB.updateMatrixWorld(true)
-        const result = evaluator.evaluate(cloneA, cloneB, opMap[op])
-        result.userData = {}
-
-        const COLORS_LIST = ['#4a9eff', '#ff6b6b', '#51cf66', '#ffd43b', '#cc5de8', '#ff922b', '#20c997', '#74c0fc']
-        const color = COLORS_LIST[Math.floor(Math.random() * COLORS_LIST.length)]
+        const cloneA = meshA.clone(); cloneA.updateMatrixWorld(true)
+        const cloneB = meshB.clone(); cloneB.updateMatrixWorld(true)
+        const result = csgEvalRef.current.evaluate(cloneA, cloneB, opMap[op])
         const id = `obj_${Date.now()}_csg`
         const objA = state.objects.find((o) => o.id === aId)!
         const newObj = {
-          id,
-          name: `Boolean ${op}`,
-          type: 'boolean' as const,
-          position: { x: 0, y: 0, z: 0 },
-          rotation: { x: 0, y: 0, z: 0 },
-          scale: { x: 1, y: 1, z: 1 },
-          color: objA?.color ?? color,
-          wireframe: false,
-          visible: true,
-          params: {},
+          id, name: `Boolean ${op}`, type: 'boolean' as const,
+          position: { x: 0, y: 0, z: 0 }, rotation: { x: 0, y: 0, z: 0 }, scale: { x: 1, y: 1, z: 1 },
+          color: objA?.color ?? '#4a9eff', wireframe: false, visible: true, params: {},
         }
-
-        // Inject the result mesh directly
         result.userData.cadId = id
-        const mat = new THREE.MeshStandardMaterial({ color: newObj.color })
-        result.material = mat
-        result.castShadow = true
-        result.receiveShadow = true
-        sceneRef.current?.add(result)
-        meshMapRef.current.set(id, result)
-
-        // Remove source objects and add boolean result to store
-        state.removeObject(aId)
-        state.removeObject(bId)
+        result.material = new THREE.MeshStandardMaterial({ color: newObj.color })
+        result.castShadow = true; result.receiveShadow = true
+        scene.add(result); meshMapRef.current.set(id, result)
+        state.removeObject(aId); state.removeObject(bId)
         useSceneStore.setState((s) => ({ objects: [...s.objects, newObj], selectedIds: [id] }))
-      } catch (e) {
-        console.error('CSG failed', e)
-      }
+      } catch (e) { console.error('CSG failed', e) }
     }
 
     viewportActions.commitSketch = () => {
-      const sketch = useSketchStore.getState()
-      const scene = sceneRef.current
-      if (!scene || sketch.shapes.length === 0) return
+      const sk = useSketchStore.getState()
+      const { shapes: skShapes, mode, extrudeDepth, revolveAngle } = sk
+      if (skShapes.length === 0) return
 
-      const COLORS_LIST = ['#4a9eff', '#ff6b6b', '#51cf66', '#ffd43b', '#cc5de8', '#ff922b', '#20c997', '#74c0fc']
-      let colorIdx = 0
+      const color = COLORS_LIST[Math.floor(Math.random() * COLORS_LIST.length)]
+      const id = `obj_${Date.now()}_sketch`
+      let mesh: THREE.Mesh
+      let rotX = 0
 
-      sketch.shapes.forEach((shape) => {
-        let geo: THREE.BufferGeometry | null = null
-
-        if (sketch.mode === 'extrude') {
-          const threeShape = new THREE.Shape()
-          if (shape.tool === 'circle' && shape.circleCenter && shape.circleRadius !== undefined) {
-            threeShape.absarc(shape.circleCenter.x, -shape.circleCenter.y, shape.circleRadius, 0, Math.PI * 2, false)
+      if (mode === 'extrude') {
+        const threeShapes = skShapes.map((s) => {
+          const shape = new THREE.Shape()
+          if (s.tool === 'circle' && s.circleCenter) {
+            shape.absarc(s.circleCenter.x, -s.circleCenter.y, s.circleRadius ?? 1, 0, Math.PI * 2, false)
           } else {
-            const pts = shape.points
-            if (pts.length < 2) return
-            threeShape.moveTo(pts[0].x, -pts[0].y)
-            for (let i = 1; i < pts.length; i++) {
-              threeShape.lineTo(pts[i].x, -pts[i].y)
-            }
-            if (shape.closed) threeShape.closePath()
+            const [first, ...rest] = s.points
+            if (!first) return shape
+            shape.moveTo(first.x, -first.y)
+            rest.forEach((p) => shape.lineTo(p.x, -p.y))
+            if (s.closed) shape.closePath()
           }
-          geo = new THREE.ExtrudeGeometry(threeShape, {
-            depth: sketch.extrudeDepth,
-            bevelEnabled: false,
-          })
-        } else {
-          // revolve
-          const pts = shape.tool === 'circle' && shape.circleCenter && shape.circleRadius !== undefined
-            ? (() => {
-                const vecs: THREE.Vector2[] = []
-                for (let i = 0; i <= 16; i++) {
-                  const a = (i / 16) * Math.PI * 2
-                  vecs.push(new THREE.Vector2(
-                    shape.circleCenter!.x + Math.cos(a) * shape.circleRadius!,
-                    shape.circleCenter!.y + Math.sin(a) * shape.circleRadius!
-                  ))
-                }
-                return vecs
-              })()
-            : shape.points.map((p) => new THREE.Vector2(p.x, p.y))
-          if (pts.length < 2) return
-          geo = new THREE.LatheGeometry(pts, 32, 0, sketch.revolveAngle)
-        }
+          return shape
+        })
+        const geo = new THREE.ExtrudeGeometry(threeShapes, { depth: extrudeDepth, bevelEnabled: false })
+        mesh = new THREE.Mesh(geo, new THREE.MeshStandardMaterial({ color }))
+        rotX = -Math.PI / 2
+        mesh.rotation.x = rotX
+      } else {
+        const profile = skShapes[0]
+        if (!profile || profile.points.length < 2) return
+        const pts = profile.points.filter((p) => p.x >= 0).map((p) => new THREE.Vector2(p.x, p.y))
+        if (pts.length < 2) return
+        const geo = new THREE.LatheGeometry(pts, 64, 0, revolveAngle)
+        mesh = new THREE.Mesh(geo, new THREE.MeshStandardMaterial({ color, side: THREE.DoubleSide }))
+      }
 
-        if (!geo) return
-
-        const color = COLORS_LIST[colorIdx % COLORS_LIST.length]
-        colorIdx++
-        const mat = new THREE.MeshStandardMaterial({ color, side: THREE.DoubleSide })
-        const mesh = new THREE.Mesh(geo, mat)
-        mesh.castShadow = true
-        mesh.receiveShadow = true
-
-        if (sketch.mode === 'extrude') {
-          mesh.rotation.x = -Math.PI / 2
-          mesh.position.y = 0
-        }
-
-        const id = `obj_${Date.now()}_${Math.random().toString(36).slice(2, 7)}`
-        mesh.userData.cadId = id
-        scene.add(mesh)
-        meshMapRef.current.set(id, mesh)
-
-        const newObj = {
-          id,
-          name: sketch.mode === 'extrude' ? 'Extrude' : 'Revolve',
-          type: 'custom' as const,
-          position: { x: 0, y: 0, z: 0 },
-          rotation: { x: 0, y: 0, z: 0 },
-          scale: { x: 1, y: 1, z: 1 },
-          color,
-          wireframe: false,
-          visible: true,
-          params: {},
-        }
-        useSceneStore.setState((s) => ({ objects: [...s.objects, newObj], selectedIds: [id] }))
-      })
-
-      useSketchStore.getState().cancelSketch()
+      const newObj = {
+        id,
+        name: mode === 'extrude' ? 'Extrude' : 'Revolve',
+        type: 'custom' as const,
+        position: { x: 0, y: 0, z: 0 },
+        rotation: { x: rotX, y: 0, z: 0 },
+        scale: { x: 1, y: 1, z: 1 },
+        color,
+        wireframe: false,
+        visible: true,
+        params: {},
+      }
+      mesh.userData.cadId = id; mesh.castShadow = true; mesh.receiveShadow = true
+      scene.add(mesh); meshMapRef.current.set(id, mesh)
+      useSceneStore.setState((s) => ({ objects: [...s.objects, newObj], selectedIds: [id] }))
+      sk.cancelSketch()
     }
 
     const animate = () => {
       rafRef.current = requestAnimationFrame(animate)
-      orbit.update()
-      renderer.render(scene, camera)
+      orbit.update(); renderer.render(scene, camera)
     }
     animate()
 
-    const onResize = () => {
-      const w = mount.clientWidth
-      const h = mount.clientHeight
-      camera.aspect = w / h
-      camera.updateProjectionMatrix()
-      renderer.setSize(w, h)
-    }
-    const ro = new ResizeObserver(onResize)
+    const ro = new ResizeObserver(() => {
+      const w = mount.clientWidth; const h = mount.clientHeight
+      camera.aspect = w / h; camera.updateProjectionMatrix(); renderer.setSize(w, h)
+    })
     ro.observe(mount)
 
     return () => {
       cancelAnimationFrame(rafRef.current)
-      ro.disconnect()
-      transform.dispose()
-      orbit.dispose()
-      renderer.dispose()
+      ro.disconnect(); transform.dispose(); orbit.dispose(); renderer.dispose()
       mount.removeChild(renderer.domElement)
-      viewportActions.exportSTL = null
-      viewportActions.exportOBJ = null
-      viewportActions.booleanOp = null
-      viewportActions.commitSketch = null
-      viewportRefs.camera = null
-      viewportRefs.mount = null
+      viewportActions.exportSTL = null; viewportActions.exportOBJ = null
+      viewportActions.booleanOp = null; viewportActions.commitSketch = null
     }
   }, [updateObject])
 
-  // Sketch mode: mouse handling on canvas
+  // Sketch mouse events
   useEffect(() => {
-    const mount = mountRef.current
+    const domEl = rendererRef.current?.domElement
     const camera = cameraRef.current
     const orbit = orbitRef.current
-    if (!mount || !camera || !orbit) return
+    if (!domEl || !camera) return
+    if (!sketchActive) { if (orbit) orbit.enabled = true; return }
+    if (orbit) orbit.enabled = false
 
-    const sketchState = useSketchStore.getState()
+    let mdX = 0; let mdY = 0
 
-    if (!sketchState.active) {
-      orbit.enabled = true
-      return
-    }
-
-    orbit.enabled = false
-
-    const getHitPoint = (clientX: number, clientY: number): { x: number; y: number } | null => {
-      const rect = mount.getBoundingClientRect()
+    const project = (clientX: number, clientY: number): Pt2 | null => {
+      const rect = domEl.getBoundingClientRect()
       const nx = ((clientX - rect.left) / rect.width) * 2 - 1
       const ny = -((clientY - rect.top) / rect.height) * 2 + 1
-      const raycaster = new THREE.Raycaster()
-      raycaster.setFromCamera(new THREE.Vector2(nx, ny), camera)
-      const currentSketch = useSketchStore.getState()
-      const plane = currentSketch.mode === 'extrude'
-        ? new THREE.Plane(new THREE.Vector3(0, 1, 0), 0)
-        : new THREE.Plane(new THREE.Vector3(0, 0, 1), 0)
-      const hit = new THREE.Vector3()
-      const result = raycaster.ray.intersectPlane(plane, hit)
-      if (!result) return null
-      if (currentSketch.mode === 'extrude') {
-        return { x: hit.x, y: hit.z }
-      } else {
-        return { x: hit.x, y: hit.y }
-      }
+      const ray = new THREE.Raycaster()
+      ray.setFromCamera(new THREE.Vector2(nx, ny), camera)
+      const normal = sketchMode === 'extrude' ? new THREE.Vector3(0, 1, 0) : new THREE.Vector3(0, 0, 1)
+      const target = new THREE.Vector3()
+      const hit = ray.ray.intersectPlane(new THREE.Plane(normal, 0), target)
+      if (!hit) return null
+      return sketchMode === 'extrude' ? { x: target.x, y: target.z } : { x: target.x, y: target.y }
     }
 
-    const onMouseDown = (e: MouseEvent) => {
-      mouseDownPosRef.current = { x: e.clientX, y: e.clientY }
+    const onMD = (e: MouseEvent) => { mdX = e.clientX; mdY = e.clientY }
+    const onMM = (e: MouseEvent) => { const p = project(e.clientX, e.clientY); if (p) useSketchStore.getState().setMousePos(p) }
+    const onCL = (e: MouseEvent) => {
+      if (Math.hypot(e.clientX - mdX, e.clientY - mdY) > 5) return
+      const p = project(e.clientX, e.clientY)
+      if (p) useSketchStore.getState().addPoint(p)
     }
+    const onDBL = (e: MouseEvent) => { useSketchStore.getState().closeShape(); e.preventDefault() }
 
-    const onMouseMove = (e: MouseEvent) => {
-      const pt = getHitPoint(e.clientX, e.clientY)
-      useSketchStore.getState().setMousePos(pt)
-    }
-
-    const onClick = (e: MouseEvent) => {
-      const down = mouseDownPosRef.current
-      if (!down) return
-      const dx = e.clientX - down.x
-      const dy = e.clientY - down.y
-      if (Math.sqrt(dx * dx + dy * dy) > 5) return // was a drag
-      const pt = getHitPoint(e.clientX, e.clientY)
-      if (pt) useSketchStore.getState().addPoint(pt)
-    }
-
-    const onDblClick = (e: MouseEvent) => {
-      e.preventDefault()
-      useSketchStore.getState().closeShape()
-    }
-
-    const onKeyDown = (e: KeyboardEvent) => {
-      if (e.key === 'Escape') {
-        useSketchStore.getState().cancelSketch()
-      }
-    }
-
-    mount.addEventListener('mousedown', onMouseDown)
-    mount.addEventListener('mousemove', onMouseMove)
-    mount.addEventListener('click', onClick)
-    mount.addEventListener('dblclick', onDblClick)
-    window.addEventListener('keydown', onKeyDown)
-
+    domEl.addEventListener('mousedown', onMD)
+    domEl.addEventListener('mousemove', onMM)
+    domEl.addEventListener('click', onCL)
+    domEl.addEventListener('dblclick', onDBL)
     return () => {
-      mount.removeEventListener('mousedown', onMouseDown)
-      mount.removeEventListener('mousemove', onMouseMove)
-      mount.removeEventListener('click', onClick)
-      mount.removeEventListener('dblclick', onDblClick)
-      window.removeEventListener('keydown', onKeyDown)
-      orbit.enabled = true
+      domEl.removeEventListener('mousedown', onMD)
+      domEl.removeEventListener('mousemove', onMM)
+      domEl.removeEventListener('click', onCL)
+      domEl.removeEventListener('dblclick', onDBL)
+      if (orbit) orbit.enabled = true
     }
-  }, [sketchStore.active])
+  }, [sketchActive, sketchMode])
 
   // Sketch visualization
   useEffect(() => {
-    const scene = sceneRef.current
-    const sketchGroup = sketchGroupRef.current
-    if (!scene || !sketchGroup) return
+    const group = sketchGroupRef.current
+    if (!group) return
+    clearGroup(group)
+    if (!sketchActive) { group.visible = false; return }
+    group.visible = true
 
-    // Clear old sketch group children
-    while (sketchGroup.children.length > 0) {
-      const child = sketchGroup.children[0]
-      if (child instanceof THREE.Mesh || child instanceof THREE.Line) {
-        if ((child as THREE.Mesh).geometry) (child as THREE.Mesh).geometry.dispose()
-        if ((child as THREE.Mesh).material) ((child as THREE.Mesh).material as THREE.Material).dispose()
-      }
-      sketchGroup.remove(child)
-    }
+    const ptToVec3 = (pt: Pt2): THREE.Vector3 =>
+      sketchMode === 'extrude'
+        ? new THREE.Vector3(pt.x, 0.02, pt.y)
+        : new THREE.Vector3(pt.x, pt.y, 0.02)
 
-    // Remove old sketch plane indicator
-    if (sketchPlaneRef.current) {
-      scene.remove(sketchPlaneRef.current)
-      sketchPlaneRef.current.geometry.dispose()
-      ;(sketchPlaneRef.current.material as THREE.Material).dispose()
-      sketchPlaneRef.current = null
-    }
+    const planeMesh = new THREE.Mesh(
+      new THREE.PlaneGeometry(20, 20),
+      new THREE.MeshBasicMaterial({ color: 0x4a9eff, transparent: true, opacity: 0.06, side: THREE.DoubleSide }),
+    )
+    if (sketchMode === 'extrude') planeMesh.rotation.x = -Math.PI / 2
+    group.add(planeMesh)
 
-    if (!sketchStore.active) return
+    const lmat = (c: number) => new THREE.LineBasicMaterial({ color: c })
+    const dmat = (c: number) => new THREE.MeshBasicMaterial({ color: c })
 
-    // Add sketch plane indicator
-    const planeGeo = new THREE.PlaneGeometry(20, 20)
-    const planeMat = new THREE.MeshBasicMaterial({
-      transparent: true,
-      opacity: 0.05,
-      color: 0x4a9eff,
-      side: THREE.DoubleSide,
-    })
-    const planeMesh = new THREE.Mesh(planeGeo, planeMat)
-    if (sketchStore.mode === 'extrude') {
-      planeMesh.rotation.x = -Math.PI / 2
-    }
-    scene.add(planeMesh)
-    sketchPlaneRef.current = planeMesh
-
-    const toWorld = (pt: { x: number; y: number }): THREE.Vector3 => {
-      if (sketchStore.mode === 'extrude') {
-        return new THREE.Vector3(pt.x, 0, pt.y)
+    shapes.forEach((s) => {
+      let pts3: THREE.Vector3[]
+      if (s.tool === 'circle' && s.circleCenter) {
+        const N = 64; const r = s.circleRadius ?? 1; const cx = s.circleCenter.x; const cy = s.circleCenter.y
+        pts3 = Array.from({ length: N + 1 }, (_, i) => {
+          const a = (i / N) * Math.PI * 2
+          return ptToVec3({ x: cx + Math.cos(a) * r, y: cy + Math.sin(a) * r })
+        })
       } else {
-        return new THREE.Vector3(pt.x, pt.y, 0)
+        pts3 = s.points.map(ptToVec3)
+        if (s.closed && pts3.length > 0) pts3.push(pts3[0].clone())
       }
-    }
-
-    const addLineMat = (color: number, dashed = false): THREE.LineBasicMaterial | THREE.LineDashedMaterial => {
-      if (dashed) {
-        return new THREE.LineDashedMaterial({ color, dashSize: 0.1, gapSize: 0.05 })
-      }
-      return new THREE.LineBasicMaterial({ color })
-    }
-
-    const addPointSphere = (pt: { x: number; y: number }, color: number) => {
-      const geo = new THREE.SphereGeometry(0.05, 8, 8)
-      const mat = new THREE.MeshBasicMaterial({ color })
-      const sphere = new THREE.Mesh(geo, mat)
-      sphere.position.copy(toWorld(pt))
-      sketchGroup.add(sphere)
-    }
-
-    // Draw completed shapes (white)
-    sketchStore.shapes.forEach((shape) => {
-      if (shape.tool === 'circle' && shape.circleCenter && shape.circleRadius !== undefined) {
-        const pts: THREE.Vector3[] = []
-        for (let i = 0; i <= 64; i++) {
-          const a = (i / 64) * Math.PI * 2
-          pts.push(toWorld({
-            x: shape.circleCenter.x + Math.cos(a) * shape.circleRadius,
-            y: shape.circleCenter.y + Math.sin(a) * shape.circleRadius,
-          }))
-        }
-        const geo = new THREE.BufferGeometry().setFromPoints(pts)
-        const line = new THREE.Line(geo, addLineMat(0xffffff))
-        sketchGroup.add(line)
-        addPointSphere(shape.circleCenter, 0xffffff)
-      } else {
-        const pts = shape.points.map(toWorld)
-        if (shape.closed) pts.push(pts[0].clone())
-        const geo = new THREE.BufferGeometry().setFromPoints(pts)
-        const line = new THREE.Line(geo, addLineMat(0xffffff))
-        sketchGroup.add(line)
-        shape.points.forEach((p) => addPointSphere(p, 0xffffff))
-      }
+      if (pts3.length >= 2) group.add(new THREE.Line(new THREE.BufferGeometry().setFromPoints(pts3), lmat(0xffffff)))
+      s.points.forEach((p) => {
+        const dot = new THREE.Mesh(new THREE.SphereGeometry(0.06, 8, 8), dmat(0xffffff))
+        dot.position.copy(ptToVec3(p)); group.add(dot)
+      })
     })
 
-    // Draw current in-progress points (cyan)
-    const cpts = sketchStore.currentPoints
-    if (cpts.length > 0) {
-      const pts = cpts.map(toWorld)
-      if (pts.length > 1) {
-        const geo = new THREE.BufferGeometry().setFromPoints(pts)
-        const line = new THREE.Line(geo, addLineMat(0x00ffff))
-        sketchGroup.add(line)
+    if (currentPoints.length > 0) {
+      const cvecs = currentPoints.map(ptToVec3)
+      if (cvecs.length >= 2) group.add(new THREE.Line(new THREE.BufferGeometry().setFromPoints(cvecs), lmat(0x00ffff)))
+      if (mousePos) {
+        const last = ptToVec3(currentPoints[currentPoints.length - 1])
+        group.add(new THREE.Line(new THREE.BufferGeometry().setFromPoints([last, ptToVec3(mousePos)]), lmat(0xffff00)))
       }
-      cpts.forEach((p) => addPointSphere(p, 0x00ffff))
-
-      // Preview line to mouse
-      if (sketchStore.mousePos) {
-        const lastPt = toWorld(cpts[cpts.length - 1])
-        const mousePt = toWorld(sketchStore.mousePos)
-        const geo = new THREE.BufferGeometry().setFromPoints([lastPt, mousePt])
-        const line = new THREE.Line(geo, addLineMat(0xffff00, true))
-        line.computeLineDistances()
-        sketchGroup.add(line)
-      }
-    } else if (sketchStore.tool === 'circle' || sketchStore.tool === 'rect') {
-      // For circle/rect first click preview: show mouse position dot
-      if (sketchStore.mousePos) {
-        addPointSphere(sketchStore.mousePos, 0x4a9eff)
-      }
+      currentPoints.forEach((p) => {
+        const dot = new THREE.Mesh(new THREE.SphereGeometry(0.06, 8, 8), dmat(0x00ffff))
+        dot.position.copy(ptToVec3(p)); group.add(dot)
+      })
     }
-  }, [sketchStore.active, sketchStore.shapes, sketchStore.currentPoints, sketchStore.mousePos, sketchStore.mode])
+    if (mousePos) {
+      const dot = new THREE.Mesh(new THREE.SphereGeometry(0.07, 8, 8), dmat(0xffff00))
+      dot.position.copy(ptToVec3(mousePos)); group.add(dot)
+    }
+  }, [sketchActive, sketchMode, shapes, currentPoints, mousePos])
 
-  // Sync objects to Three.js scene
+  // Sync CAD objects
   useEffect(() => {
     const scene = sceneRef.current
     if (!scene) return
     const existingIds = new Set(objects.map((o) => o.id))
 
-    // Remove deleted
     meshMapRef.current.forEach((mesh, id) => {
       if (!existingIds.has(id)) {
         scene.remove(mesh)
         const outline = outlineMapRef.current.get(id)
-        if (outline) { scene.remove(outline); outlineMapRef.current.delete(id) }
+        if (outline) { mesh.remove(outline); outlineMapRef.current.delete(id) }
         mesh.geometry.dispose()
         ;(mesh.material as THREE.Material).dispose()
         meshMapRef.current.delete(id)
@@ -562,117 +385,80 @@ export default function Viewport3D() {
 
     objects.forEach((obj) => {
       let mesh = meshMapRef.current.get(obj.id)
-      // For boolean/custom results, mesh is already in scene — just update material/visibility
       if (!mesh) {
-        if (obj.type === 'custom' || obj.type === 'boolean') {
-          // These are managed directly; skip if not in map yet
-          return
-        }
-        const geo = buildGeometry(obj.type as PrimitiveType, obj.params)
+        if (obj.type === 'boolean' || obj.type === 'custom') return
+        const geo = buildGeometry(obj.type, obj.params)
         const mat = new THREE.MeshStandardMaterial({ color: obj.color })
         mesh = new THREE.Mesh(geo, mat)
-        mesh.castShadow = true
-        mesh.receiveShadow = true
+        mesh.castShadow = true; mesh.receiveShadow = true
         mesh.userData.cadId = obj.id
-        scene.add(mesh)
-        meshMapRef.current.set(obj.id, mesh)
+        scene.add(mesh); meshMapRef.current.set(obj.id, mesh)
       } else if (obj.type !== 'boolean' && obj.type !== 'custom') {
-        // Rebuild geometry if params changed
         mesh.geometry.dispose()
-        mesh.geometry = buildGeometry(obj.type as PrimitiveType, obj.params)
+        mesh.geometry = buildGeometry(obj.type, obj.params)
       }
       applyTransform(mesh, obj)
     })
   }, [objects])
 
-  // Selection highlight with outline
+  // Selection outlines
   useEffect(() => {
     const scene = sceneRef.current
     if (!scene) return
     const allIds = new Set(objects.map((o) => o.id))
-
-    // Clean up outlines for removed/deselected objects
     outlineMapRef.current.forEach((outline, id) => {
       if (!selectedIds.includes(id) || !allIds.has(id)) {
-        scene.remove(outline)
+        const mesh = meshMapRef.current.get(id)
+        if (mesh) mesh.remove(outline)
         outline.geometry.dispose()
         ;(outline.material as THREE.Material).dispose()
         outlineMapRef.current.delete(id)
       }
     })
-
-    // Add outlines for selected objects
     selectedIds.forEach((id, idx) => {
       const mesh = meshMapRef.current.get(id)
-      if (!mesh) return
-      if (outlineMapRef.current.has(id)) return
-      const outlineGeo = mesh.geometry.clone()
-      const outlineMat = new THREE.MeshBasicMaterial({
-        color: idx === 0 ? SELECT_COLOR : OUTLINE_COLOR,
-        side: THREE.BackSide,
-      })
-      const outline = new THREE.Mesh(outlineGeo, outlineMat)
+      if (!mesh || outlineMapRef.current.has(id)) return
+      const outline = new THREE.Mesh(
+        mesh.geometry.clone(),
+        new THREE.MeshBasicMaterial({ color: idx === 0 ? SELECT_COLOR : OUTLINE_COLOR, side: THREE.BackSide }),
+      )
       outline.scale.multiplyScalar(1.05)
-      mesh.add(outline)
-      outlineMapRef.current.set(id, outline)
+      mesh.add(outline); outlineMapRef.current.set(id, outline)
     })
-
-    // Attach transform to primary selection
     const transform = transformRef.current
     if (!transform) return
-    if (selectedIds.length > 0) {
+    if (selectedIds.length > 0 && !sketchActive) {
       const mesh = meshMapRef.current.get(selectedIds[0])
       if (mesh) transform.attach(mesh)
     } else {
       transform.detach()
     }
-  }, [selectedIds, objects])
+  }, [selectedIds, objects, sketchActive])
 
-  useEffect(() => {
-    transformRef.current?.setMode(transformMode)
-  }, [transformMode])
-
-  useEffect(() => {
-    if (gridRef.current) gridRef.current.visible = gridVisible
-  }, [gridVisible])
-
-  useEffect(() => {
-    if (axesRef.current) axesRef.current.visible = axesVisible
-  }, [axesVisible])
+  useEffect(() => { transformRef.current?.setMode(transformMode) }, [transformMode])
+  useEffect(() => { if (gridRef.current) gridRef.current.visible = gridVisible }, [gridVisible])
+  useEffect(() => { if (axesRef.current) axesRef.current.visible = axesVisible }, [axesVisible])
 
   const handleClick = useCallback(
     (e: React.MouseEvent<HTMLDivElement>) => {
-      // Skip click handling when sketch is active
       if (useSketchStore.getState().active) return
-
-      const mount = mountRef.current
-      const camera = cameraRef.current
-      const scene = sceneRef.current
+      const mount = mountRef.current; const camera = cameraRef.current; const scene = sceneRef.current
       if (!mount || !camera || !scene) return
-
       const rect = mount.getBoundingClientRect()
       const x = ((e.clientX - rect.left) / rect.width) * 2 - 1
       const y = -((e.clientY - rect.top) / rect.height) * 2 + 1
       const raycaster = new THREE.Raycaster()
       raycaster.setFromCamera(new THREE.Vector2(x, y), camera)
-
       const meshes = Array.from(meshMapRef.current.values())
       const hits = raycaster.intersectObjects(meshes)
-      if (hits.length > 0) {
-        const id = hits[0].object.userData.cadId as string
-        selectObject(id, e.shiftKey)
-      } else if (!e.shiftKey) {
-        selectObject(null)
-      }
+      if (hits.length > 0) selectObject(hits[0].object.userData.cadId as string, e.shiftKey)
+      else if (!e.shiftKey) selectObject(null)
     },
     [selectObject],
   )
 
   return (
-    <div
-      ref={mountRef}
-      onClick={handleClick}
-      style={{ width: '100%', height: '100%', cursor: sketchStore.active ? 'crosshair' : 'crosshair' }}
-    />
+    <div ref={mountRef} onClick={handleClick}
+      style={{ width: '100%', height: '100%', cursor: sketchActive ? 'crosshair' : 'default' }} />
   )
 }
