@@ -4,6 +4,9 @@ import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js'
 import { TransformControls } from 'three/examples/jsm/controls/TransformControls.js'
 import { STLExporter } from 'three/examples/jsm/exporters/STLExporter.js'
 import { OBJExporter } from 'three/examples/jsm/exporters/OBJExporter.js'
+import { STLLoader } from 'three/examples/jsm/loaders/STLLoader.js'
+import { OBJLoader } from 'three/examples/jsm/loaders/OBJLoader.js'
+import { mergeGeometries } from 'three/examples/jsm/utils/BufferGeometryUtils.js'
 import { ADDITION, SUBTRACTION, INTERSECTION, Evaluator } from 'three-bvh-csg'
 import { useSceneStore } from '../store/sceneStore'
 import { useSketchStore } from '../store/sketchStore'
@@ -14,6 +17,8 @@ export const viewportActions = {
   exportOBJ: null as (() => void) | null,
   booleanOp: null as ((op: BooleanOp) => void) | null,
   commitSketch: null as (() => void) | null,
+  importFile: null as ((file: File) => void) | null,
+  setView: null as ((view: 'perspective' | 'top' | 'front' | 'right') => void) | null,
 }
 
 export function buildGeometry(type: PrimitiveType | 'boolean' | 'custom', p: GeometryParams): THREE.BufferGeometry {
@@ -119,6 +124,9 @@ export default function Viewport3D() {
     orbitRef.current = orbit
 
     const transform = new TransformControls(camera, renderer.domElement)
+    transform.addEventListener('mouseDown', () => {
+      useSceneStore.getState()._snapshot()
+    })
     transform.addEventListener('dragging-changed', (e) => {
       orbit.enabled = !(e as { value: boolean }).value
     })
@@ -182,6 +190,73 @@ export default function Viewport3D() {
         state.removeObject(aId); state.removeObject(bId)
         useSceneStore.setState((s) => ({ objects: [...s.objects, newObj], selectedIds: [id] }))
       } catch (e) { console.error('CSG failed', e) }
+    }
+
+    viewportActions.setView = (view) => {
+      const cam = cameraRef.current
+      const orb = orbitRef.current
+      if (!cam || !orb) return
+      orb.target.set(0, 0, 0)
+      const d = 8
+      switch (view) {
+        case 'top':   cam.position.set(0, d, 0.001); break
+        case 'front': cam.position.set(0, 2, d); break
+        case 'right': cam.position.set(d, 2, 0); break
+        default:      cam.position.set(5, 5, 5); break
+      }
+      cam.lookAt(0, 0, 0)
+      orb.update()
+    }
+
+    viewportActions.importFile = (file: File) => {
+      const ext = file.name.split('.').pop()?.toLowerCase()
+      const color = COLORS_LIST[Math.floor(Math.random() * COLORS_LIST.length)]
+
+      const addToScene = (geo: THREE.BufferGeometry, name: string) => {
+        geo.computeBoundingBox()
+        geo.center()
+        const mid = `obj_${Date.now()}_${Math.random().toString(36).slice(2, 5)}`
+        const mesh = new THREE.Mesh(geo, new THREE.MeshStandardMaterial({ color }))
+        mesh.userData.cadId = mid; mesh.castShadow = true; mesh.receiveShadow = true
+        scene.add(mesh); meshMapRef.current.set(mid, mesh)
+        const newObj = {
+          id: mid, name, type: 'custom' as const,
+          position: { x: 0, y: 0, z: 0 }, rotation: { x: 0, y: 0, z: 0 }, scale: { x: 1, y: 1, z: 1 },
+          color, wireframe: false, visible: true, params: {},
+        }
+        useSceneStore.setState((s) => ({ objects: [...s.objects, newObj], selectedIds: [mid] }))
+      }
+
+      if (ext === 'stl') {
+        const reader = new FileReader()
+        reader.onload = (e) => {
+          const data = e.target?.result as ArrayBuffer
+          if (!data) return
+          const geo = new STLLoader().parse(data)
+          addToScene(geo, file.name.replace(/\.stl$/i, ''))
+        }
+        reader.readAsArrayBuffer(file)
+      } else if (ext === 'obj') {
+        const reader = new FileReader()
+        reader.onload = (e) => {
+          const text = e.target?.result as string
+          if (!text) return
+          const group = new OBJLoader().parse(text)
+          const geos: THREE.BufferGeometry[] = []
+          group.traverse((child) => {
+            if ((child as THREE.Mesh).isMesh) {
+              const m = child as THREE.Mesh
+              m.updateWorldMatrix(true, false)
+              const g = m.geometry.clone(); g.applyMatrix4(m.matrixWorld); geos.push(g)
+            }
+          })
+          if (geos.length === 0) return
+          const merged = geos.length === 1 ? geos[0] : mergeGeometries(geos)
+          if (!merged) return
+          addToScene(merged, file.name.replace(/\.obj$/i, ''))
+        }
+        reader.readAsText(file)
+      }
     }
 
     viewportActions.commitSketch = () => {
@@ -257,6 +332,7 @@ export default function Viewport3D() {
       mount.removeChild(renderer.domElement)
       viewportActions.exportSTL = null; viewportActions.exportOBJ = null
       viewportActions.booleanOp = null; viewportActions.commitSketch = null
+      viewportActions.importFile = null; viewportActions.setView = null
     }
   }, [updateObject])
 

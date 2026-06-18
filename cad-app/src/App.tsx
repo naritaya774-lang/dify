@@ -8,13 +8,19 @@ import { useSceneStore } from './store/sceneStore'
 import { useLang } from './i18n/useLang'
 
 export default function App() {
-  const { selectedIds, removeObject, setTransformMode } = useSceneStore()
+  const { selectedIds, removeObject, setTransformMode, undo, redo } = useSceneStore()
   const { t } = useLang()
 
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
       const tag = (e.target as HTMLElement).tagName
       if (tag === 'INPUT') return
+      if ((e.ctrlKey || e.metaKey) && e.key === 'z' && !e.shiftKey) {
+        e.preventDefault(); undo(); return
+      }
+      if ((e.ctrlKey || e.metaKey) && (e.key === 'y' || (e.key === 'z' && e.shiftKey))) {
+        e.preventDefault(); redo(); return
+      }
       if (e.key === 'Delete' || e.key === 'Backspace') {
         const { selectedIds } = useSceneStore.getState()
         selectedIds.forEach((id) => removeObject(id))
@@ -25,7 +31,7 @@ export default function App() {
     }
     window.addEventListener('keydown', onKey)
     return () => window.removeEventListener('keydown', onKey)
-  }, [selectedIds, removeObject, setTransformMode])
+  }, [selectedIds, removeObject, setTransformMode, undo, redo])
 
   return (
     <div style={styles.app}>

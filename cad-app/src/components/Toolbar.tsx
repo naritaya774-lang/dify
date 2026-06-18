@@ -1,9 +1,11 @@
-import { useState } from 'react'
+import { useState, useRef } from 'react'
 import { useSceneStore } from '../store/sceneStore'
 import { useSketchStore } from '../store/sketchStore'
 import { useLang } from '../i18n/useLang'
 import { viewportActions } from './Viewport3D'
 import ArrayDialog from './ArrayDialog'
+import AlignDialog from './AlignDialog'
+import ShortcutsDialog from './ShortcutsDialog'
 import type { BooleanOp, PrimitiveType, TransformMode } from '../types'
 
 const PRIMITIVE_ICONS: Record<PrimitiveType, string> = {
@@ -24,11 +26,16 @@ const TRANSFORM_MODES: { mode: TransformMode; labelKey: 'move' | 'rotate' | 'sca
 
 export default function Toolbar() {
   const { addObject, transformMode, setTransformMode, selectedIds, removeObject, duplicateObject,
-    gridVisible, axesVisible, toggleGrid, toggleAxes, clearScene, objects, fileName, mirrorObject } =
+    gridVisible, axesVisible, toggleGrid, toggleAxes, clearScene, objects, fileName, mirrorObject,
+    undo, redo } =
     useSceneStore()
   const sketchStore = useSketchStore()
   const { t, lang, setLang } = useLang()
   const [showArrayDialog, setShowArrayDialog] = useState(false)
+  const [showAlignDialog, setShowAlignDialog] = useState(false)
+  const [showShortcuts, setShowShortcuts] = useState(false)
+  const stlInputRef = useRef<HTMLInputElement>(null)
+  const objInputRef = useRef<HTMLInputElement>(null)
 
   const PRIMITIVES: PrimitiveType[] = ['box', 'sphere', 'cylinder', 'cone', 'torus', 'plane']
 
@@ -72,6 +79,37 @@ export default function Toolbar() {
       <div style={styles.group}>
         <button style={styles.btn} onClick={handleOpen}>📂 {t('open')}</button>
         <button style={styles.btn} onClick={handleSave}>💾 {t('save')}</button>
+      </div>
+      <div style={styles.divider} />
+
+      {/* Undo / Redo */}
+      <div style={styles.group}>
+        <button style={styles.iconBtn} onClick={undo} title={`${t('undo')} [Ctrl+Z]`}>
+          <span style={{ fontSize: 15 }}>↩</span>
+          <span style={styles.btnLabel}>{t('undo')}</span>
+        </button>
+        <button style={styles.iconBtn} onClick={redo} title={`${t('redo')} [Ctrl+Y]`}>
+          <span style={{ fontSize: 15 }}>↪</span>
+          <span style={styles.btnLabel}>{t('redo')}</span>
+        </button>
+      </div>
+      <div style={styles.divider} />
+
+      {/* Import */}
+      <div style={styles.groupLabel}>Import</div>
+      <div style={styles.group}>
+        <button style={styles.iconBtn} onClick={() => stlInputRef.current?.click()} title="Import STL">
+          <span style={{ fontSize: 13 }}>📥</span>
+          <span style={styles.btnLabel}>{t('importSTL')}</span>
+        </button>
+        <button style={styles.iconBtn} onClick={() => objInputRef.current?.click()} title="Import OBJ">
+          <span style={{ fontSize: 13 }}>📥</span>
+          <span style={styles.btnLabel}>{t('importOBJ')}</span>
+        </button>
+        <input ref={stlInputRef} type="file" accept=".stl" style={{ display: 'none' }}
+          onChange={(e) => { const f = e.target.files?.[0]; if (f) viewportActions.importFile?.(f); e.target.value = '' }} />
+        <input ref={objInputRef} type="file" accept=".obj" style={{ display: 'none' }}
+          onChange={(e) => { const f = e.target.files?.[0]; if (f) viewportActions.importFile?.(f); e.target.value = '' }} />
       </div>
       <div style={styles.divider} />
 
@@ -204,6 +242,15 @@ export default function Toolbar() {
           <span style={styles.btnLabel}>{t('duplicate')}</span>
         </button>
         <button
+          style={{ ...styles.iconBtn, opacity: selectedIds.length >= 2 ? 1 : 0.4 }}
+          disabled={selectedIds.length < 2}
+          onClick={() => setShowAlignDialog(true)}
+          title={t('align')}
+        >
+          <span style={{ fontSize: 13 }}>⬡</span>
+          <span style={styles.btnLabel}>{t('align')}</span>
+        </button>
+        <button
           style={{ ...styles.iconBtn, opacity: hasSelection ? 1 : 0.4 }}
           disabled={!hasSelection}
           onClick={() => selectedIds[0] && removeObject(selectedIds[0])}
@@ -225,6 +272,23 @@ export default function Toolbar() {
           <span>⊹</span><span style={styles.btnLabel}>{t('axes')}</span>
         </button>
       </div>
+      <div style={styles.divider} />
+
+      {/* Camera */}
+      <div style={styles.groupLabel}>{t('camera')}</div>
+      <div style={styles.group}>
+        {([
+          { key: 'perspective', label: t('viewPersp'), icon: '◈' },
+          { key: 'top', label: t('viewTop'), icon: '⊤' },
+          { key: 'front', label: t('viewFront'), icon: '□' },
+          { key: 'right', label: t('viewRight'), icon: '▷' },
+        ] as const).map(({ key, label, icon }) => (
+          <button key={key} style={styles.iconBtn} onClick={() => viewportActions.setView?.(key)} title={label}>
+            <span style={{ fontSize: 13 }}>{icon}</span>
+            <span style={styles.btnLabel}>{label}</span>
+          </button>
+        ))}
+      </div>
 
       <div style={{ flex: 1 }} />
 
@@ -236,6 +300,11 @@ export default function Toolbar() {
         )}
       </div>
 
+      <div style={styles.divider} />
+      <button style={styles.iconBtn} onClick={() => setShowShortcuts(true)} title={t('shortcuts')}>
+        <span style={{ fontSize: 14 }}>⌨</span>
+        <span style={styles.btnLabel}>{t('shortcuts')}</span>
+      </button>
       <div style={styles.divider} />
       <button style={{ ...styles.langBtn }} onClick={() => setLang(lang === 'ja' ? 'en' : 'ja')} title="Switch language">
         {lang === 'ja' ? '🇯🇵 日本語' : '🇺🇸 English'}
@@ -254,6 +323,12 @@ export default function Toolbar() {
           objectId={selectedIds[0]}
           onClose={() => setShowArrayDialog(false)}
         />
+      )}
+      {showAlignDialog && (
+        <AlignDialog onClose={() => setShowAlignDialog(false)} />
+      )}
+      {showShortcuts && (
+        <ShortcutsDialog onClose={() => setShowShortcuts(false)} />
       )}
     </div>
   )

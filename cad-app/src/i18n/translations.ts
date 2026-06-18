@@ -110,6 +110,23 @@ export const translations = {
     arrayAxis: 'Axis',
     linear: 'Linear',
     circular: 'Circular',
+    // Undo/Redo
+    undo: 'Undo',
+    redo: 'Redo',
+    // Import
+    importSTL: 'STL',
+    importOBJ: 'OBJ',
+    // Camera
+    camera: 'Camera',
+    viewTop: 'Top',
+    viewFront: 'Front',
+    viewRight: 'Right',
+    viewPersp: '3D',
+    // Shortcuts
+    shortcuts: 'Shortcuts',
+    close: 'Close',
+    // Align
+    align: 'Align',
   },
   ja: {
     appName: 'Dify CAD',
@@ -220,6 +237,23 @@ export const translations = {
     arrayAxis: '軸',
     linear: '直線',
     circular: '円形',
+    // Undo/Redo
+    undo: '元に戻す',
+    redo: 'やり直し',
+    // Import
+    importSTL: 'STL',
+    importOBJ: 'OBJ',
+    // Camera
+    camera: 'カメラ',
+    viewTop: '上面',
+    viewFront: '前面',
+    viewRight: '右面',
+    viewPersp: '3D',
+    // Shortcuts
+    shortcuts: 'ショートカット',
+    close: '閉じる',
+    // Align
+    align: '整列',
   },
 } as const
 

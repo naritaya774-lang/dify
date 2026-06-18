@@ -21,11 +21,28 @@ interface SceneActions {
   linearArray: (id: string, axis: 'x' | 'y' | 'z', count: number, spacing: number) => void
   circularArray: (id: string, axis: 'y', count: number, radius: number) => void
   mirrorObject: (id: string, axis: 'x' | 'y' | 'z') => void
+  undo: () => void
+  redo: () => void
+  _snapshot: () => void
+  alignObjects: (axis: 'x' | 'y' | 'z', mode: 'min' | 'center' | 'max') => void
 }
 
 const COLORS = ['#4a9eff', '#ff6b6b', '#51cf66', '#ffd43b', '#cc5de8', '#ff922b', '#20c997', '#74c0fc']
 let colorIndex = 0
 let objCounter = 1
+
+type Snapshot = { objects: CADObject[]; selectedIds: string[] }
+const _past: Snapshot[] = []
+const _future: Snapshot[] = []
+
+function takeSnapshot(state: { objects: CADObject[]; selectedIds: string[] }) {
+  _past.push({
+    objects: state.objects.map((o) => ({ ...o, params: { ...o.params } })),
+    selectedIds: [...state.selectedIds],
+  })
+  if (_past.length > 50) _past.shift()
+  _future.length = 0
+}
 
 function makeId() {
   return `obj_${Date.now()}_${Math.random().toString(36).slice(2, 7)}`
@@ -57,6 +74,7 @@ export const useSceneStore = create<SceneState & SceneActions>((set, get) => ({
   ...initialState,
 
   addObject: (type) => {
+    takeSnapshot(get())
     const color = COLORS[colorIndex % COLORS.length]
     colorIndex++
     const key = `obj${type.charAt(0).toUpperCase() + type.slice(1)}` as TranslationKey
@@ -77,6 +95,7 @@ export const useSceneStore = create<SceneState & SceneActions>((set, get) => ({
   },
 
   removeObject: (id) => {
+    takeSnapshot(get())
     set((s) => ({
       objects: s.objects.filter((o) => o.id !== id),
       selectedIds: s.selectedIds.filter((sid) => sid !== id),
@@ -106,6 +125,7 @@ export const useSceneStore = create<SceneState & SceneActions>((set, get) => ({
   },
 
   updateParams: (id, params) => {
+    takeSnapshot(get())
     set((s) => ({
       objects: s.objects.map((o) =>
         o.id === id ? { ...o, params: { ...o.params, ...params } } : o
@@ -119,6 +139,7 @@ export const useSceneStore = create<SceneState & SceneActions>((set, get) => ({
   toggleAxes: () => set((s) => ({ axesVisible: !s.axesVisible })),
 
   duplicateObject: (id) => {
+    takeSnapshot(get())
     const obj = get().objects.find((o) => o.id === id)
     if (!obj) return
     const copyLabel = useLang.getState().t('objCopy')
@@ -132,13 +153,14 @@ export const useSceneStore = create<SceneState & SceneActions>((set, get) => ({
     set((s) => ({ objects: [...s.objects, copy], selectedIds: [copy.id] }))
   },
 
-  clearScene: () => set({ objects: [], selectedIds: [] }),
+  clearScene: () => { takeSnapshot(get()); set({ objects: [], selectedIds: [] }) },
 
   loadScene: (state) => set({ ...state }),
 
   setFileName: (name) => set({ fileName: name }),
 
   linearArray: (id, axis, count, spacing) => {
+    takeSnapshot(get())
     const obj = get().objects.find((o) => o.id === id)
     if (!obj) return
     const copies: CADObject[] = []
@@ -158,6 +180,7 @@ export const useSceneStore = create<SceneState & SceneActions>((set, get) => ({
   },
 
   circularArray: (id, _axis, count, radius) => {
+    takeSnapshot(get())
     const obj = get().objects.find((o) => o.id === id)
     if (!obj) return
     const copies: CADObject[] = []
@@ -177,6 +200,7 @@ export const useSceneStore = create<SceneState & SceneActions>((set, get) => ({
   },
 
   mirrorObject: (id, axis) => {
+    takeSnapshot(get())
     const obj = get().objects.find((o) => o.id === id)
     if (!obj) return
     const pos = { ...obj.position }
@@ -204,5 +228,48 @@ export const useSceneStore = create<SceneState & SceneActions>((set, get) => ({
       params: { ...obj.params },
     }
     set((s) => ({ objects: [...s.objects, mirror] }))
+  },
+
+  undo: () => {
+    if (_past.length === 0) return
+    const prev = _past.pop()!
+    const current = get()
+    _future.push({
+      objects: current.objects.map((o) => ({ ...o, params: { ...o.params } })),
+      selectedIds: [...current.selectedIds],
+    })
+    set({ objects: prev.objects, selectedIds: prev.selectedIds })
+  },
+
+  redo: () => {
+    if (_future.length === 0) return
+    const next = _future.pop()!
+    const current = get()
+    _past.push({
+      objects: current.objects.map((o) => ({ ...o, params: { ...o.params } })),
+      selectedIds: [...current.selectedIds],
+    })
+    set({ objects: next.objects, selectedIds: next.selectedIds })
+  },
+
+  _snapshot: () => {
+    takeSnapshot(get())
+  },
+
+  alignObjects: (axis, mode) => {
+    const ids = get().selectedIds
+    if (ids.length < 2) return
+    takeSnapshot(get())
+    const objs = get().objects.filter((o) => ids.includes(o.id))
+    const vals = objs.map((o) => o.position[axis])
+    const target =
+      mode === 'min' ? Math.min(...vals)
+      : mode === 'max' ? Math.max(...vals)
+      : vals.reduce((a, b) => a + b, 0) / vals.length
+    set((s) => ({
+      objects: s.objects.map((o) =>
+        ids.includes(o.id) ? { ...o, position: { ...o.position, [axis]: target } } : o
+      ),
+    }))
   },
 }))
