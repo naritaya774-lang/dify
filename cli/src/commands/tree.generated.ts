@@ -17,6 +17,7 @@ import CreateMember from './create/member/index.js'
 import DeleteMember from './delete/member/index.js'
 import DescribeApp from './describe/app/index.js'
 import EnvList from './env/list/index.js'
+import GenerateVideo from './generate/video/index.js'
 import GetApp from './get/app/index.js'
 import GetMember from './get/member/index.js'
 import GetWorkspace from './get/workspace/index.js'
@@ -71,6 +72,11 @@ export const commandTree: CommandTree = {
   env: {
     subcommands: {
       list: { command: EnvList, subcommands: {} },
+    },
+  },
+  generate: {
+    subcommands: {
+      video: { command: GenerateVideo, subcommands: {} },
     },
   },
   get: {
