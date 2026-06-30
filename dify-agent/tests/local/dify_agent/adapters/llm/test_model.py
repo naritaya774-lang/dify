@@ -479,3 +479,69 @@ class DifyLLMAdapterModelTests(unittest.IsolatedAsyncioTestCase):
                 )
 
         self.assertEqual(str(context.exception), "missing endpoint config")
+
+    async def test_request_maps_connect_error_to_http_503(self) -> None:
+        """ConnectError is converted to ModelHTTPError(503) so the agent layer gets a typed error."""
+        from contextlib import asynccontextmanager
+        from unittest.mock import patch
+
+        original_exc = httpx.ConnectError("Connection refused")
+
+        @asynccontextmanager
+        async def _raise_connect_error(_client: httpx.AsyncClient, *args: object, **kwargs: object):
+            raise original_exc
+            yield  # pragma: no cover
+
+        adapter = DifyLLMAdapterModel(
+            "demo-model",
+            self.make_provider(),
+            model_provider="openai",
+            credentials={"api_key": "secret"},
+        )
+
+        with patch.object(httpx.AsyncClient, "stream", new=_raise_connect_error):
+            with self.assertRaises(ModelHTTPError) as context:
+                await adapter.request(
+                    [ModelRequest(parts=[UserPromptPart("hello")])],
+                    model_settings=None,
+                    model_request_parameters=ModelRequestParameters(),
+                )
+
+        self.assertEqual(context.exception.status_code, 503)
+        body = context.exception.body
+        assert isinstance(body, dict)
+        self.assertEqual(body.get("error_type"), "InvokeConnectionError")
+        self.assertIs(context.exception.__cause__, original_exc)
+
+    async def test_request_maps_connect_timeout_to_http_503(self) -> None:
+        """ConnectTimeout is converted to ModelHTTPError(503) so the agent layer gets a typed error."""
+        from contextlib import asynccontextmanager
+        from unittest.mock import patch
+
+        original_exc = httpx.ConnectTimeout("Connection timed out")
+
+        @asynccontextmanager
+        async def _raise_connect_timeout(_client: httpx.AsyncClient, *args: object, **kwargs: object):
+            raise original_exc
+            yield  # pragma: no cover
+
+        adapter = DifyLLMAdapterModel(
+            "demo-model",
+            self.make_provider(),
+            model_provider="openai",
+            credentials={"api_key": "secret"},
+        )
+
+        with patch.object(httpx.AsyncClient, "stream", new=_raise_connect_timeout):
+            with self.assertRaises(ModelHTTPError) as context:
+                await adapter.request(
+                    [ModelRequest(parts=[UserPromptPart("hello")])],
+                    model_settings=None,
+                    model_request_parameters=ModelRequestParameters(),
+                )
+
+        self.assertEqual(context.exception.status_code, 503)
+        body = context.exception.body
+        assert isinstance(body, dict)
+        self.assertEqual(body.get("error_type"), "InvokeConnectionError")
+        self.assertIs(context.exception.__cause__, original_exc)

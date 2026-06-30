@@ -88,6 +88,13 @@ class DifyPluginDaemonLLMClient:
         request_data: Mapping[str, object],
         response_model: type[T],
     ) -> AsyncIterator[T]:
+        """Stream one plugin-daemon dispatch request and yield typed response items.
+
+        ``httpx.ConnectError`` and ``httpx.ConnectTimeout`` are converted to
+        ``ModelHTTPError(503)`` so the Pydantic AI agent layer receives a typed
+        error when the plugin daemon is unreachable rather than a raw transport
+        exception.
+        """
         payload: dict[str, object] = {"data": to_plugin_daemon_jsonable(request_data)}
         if self.user_id is not None:
             payload["user_id"] = self.user_id
@@ -99,34 +106,11 @@ class DifyPluginDaemonLLMClient:
         }
         url = f"{self.plugin_daemon_url}/{path}"
 
-        async with self.http_client.stream("POST", url, headers=headers, json=payload) as response:
-            if response.is_error:
-                body = (await response.aread()).decode("utf-8", errors="replace")
-                error = decode_plugin_daemon_error_payload(body)
-                if error is not None:
-                    resolved_error = unwrap_plugin_daemon_error(
-                        error_type=error["error_type"],
-                        message=error["message"],
-                    )
-                    _raise_plugin_daemon_error(
-                        model_name=model_name,
-                        error_type=resolved_error["error_type"],
-                        message=resolved_error["message"],
-                        status_code=response.status_code,
-                        body=resolved_error,
-                    )
-                raise ModelHTTPError(response.status_code, model_name, body or None)
-
-            async for raw_line in response.aiter_lines():
-                line = raw_line.strip()
-                if not line:
-                    continue
-                if line.startswith("data:"):
-                    line = line[5:].strip()
-
-                wrapped = PluginDaemonBasicResponse.model_validate_json(line)
-                if wrapped.code != 0:
-                    error = decode_plugin_daemon_error_payload(wrapped.message)
+        try:
+            async with self.http_client.stream("POST", url, headers=headers, json=payload) as response:
+                if response.is_error:
+                    body = (await response.aread()).decode("utf-8", errors="replace")
+                    error = decode_plugin_daemon_error_payload(body)
                     if error is not None:
                         resolved_error = unwrap_plugin_daemon_error(
                             error_type=error["error_type"],
@@ -136,15 +120,49 @@ class DifyPluginDaemonLLMClient:
                             model_name=model_name,
                             error_type=resolved_error["error_type"],
                             message=resolved_error["message"],
+                            status_code=response.status_code,
                             body=resolved_error,
                         )
-                    raise ModelAPIError(
-                        model_name,
-                        f"Plugin daemon returned error code {wrapped.code}: {wrapped.message}",
-                    )
-                if wrapped.data is None:
-                    raise UnexpectedModelBehavior("Plugin daemon returned an empty stream item")
-                yield response_model.model_validate(wrapped.data)
+                    raise ModelHTTPError(response.status_code, model_name, body or None)
+
+                async for raw_line in response.aiter_lines():
+                    line = raw_line.strip()
+                    if not line:
+                        continue
+                    if line.startswith("data:"):
+                        line = line[5:].strip()
+
+                    wrapped = PluginDaemonBasicResponse.model_validate_json(line)
+                    if wrapped.code != 0:
+                        error = decode_plugin_daemon_error_payload(wrapped.message)
+                        if error is not None:
+                            resolved_error = unwrap_plugin_daemon_error(
+                                error_type=error["error_type"],
+                                message=error["message"],
+                            )
+                            _raise_plugin_daemon_error(
+                                model_name=model_name,
+                                error_type=resolved_error["error_type"],
+                                message=resolved_error["message"],
+                                body=resolved_error,
+                            )
+                        raise ModelAPIError(
+                            model_name,
+                            f"Plugin daemon returned error code {wrapped.code}: {wrapped.message}",
+                        )
+                    if wrapped.data is None:
+                        raise UnexpectedModelBehavior("Plugin daemon returned an empty stream item")
+                    yield response_model.model_validate(wrapped.data)
+        except (ModelAPIError, UnexpectedModelBehavior, UserError):
+            raise
+        except httpx.ConnectError as exc:
+            raise ModelHTTPError(
+                503, model_name, {"error_type": "InvokeConnectionError", "message": str(exc)}
+            ) from exc
+        except httpx.ConnectTimeout as exc:
+            raise ModelHTTPError(
+                503, model_name, {"error_type": "InvokeConnectionError", "message": str(exc)}
+            ) from exc
 
 
 @dataclass(slots=True, kw_only=True)

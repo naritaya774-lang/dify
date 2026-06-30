@@ -203,40 +203,22 @@ class DifyPluginDaemonToolClient:
         the shared plugin context included ``user_id``, it is forwarded as a
         top-level peer to ``data`` so daemon-side auditing and credential logic
         can attribute the request to the end user.
+
+        ``httpx.ConnectError`` and ``httpx.ConnectTimeout`` are converted to
+        ``DifyPluginToolClientError`` with ``error_type="InvokeConnectionError"``
+        so callers receive a typed domain error when the plugin daemon is
+        unreachable rather than a raw transport exception.
         """
         payload: dict[str, object] = {"data": to_plugin_daemon_jsonable(dict(request_data))}
         if self.user_id is not None:
             payload["user_id"] = self.user_id
 
         url = f"{self.plugin_daemon_url}/{path}"
-        async with self.http_client.stream("POST", url, headers=self._headers(), json=payload) as response:
-            if response.is_error:
-                body = (await response.aread()).decode("utf-8", errors="replace")
-                error = decode_plugin_daemon_error_payload(body)
-                if error is not None:
-                    resolved_error = unwrap_plugin_daemon_error(
-                        error_type=error["error_type"],
-                        message=error["message"],
-                    )
-                    _raise_tool_daemon_error(
-                        error_type=resolved_error["error_type"],
-                        message=resolved_error["message"],
-                        status_code=response.status_code,
-                    )
-                raise DifyPluginToolClientError(
-                    body or "Plugin daemon stream request failed.", status_code=response.status_code
-                )
-
-            async for raw_line in response.aiter_lines():
-                line = raw_line.strip()
-                if not line:
-                    continue
-                if line.startswith("data:"):
-                    line = line[5:].strip()
-
-                wrapped = PluginDaemonBasicResponse.model_validate_json(line)
-                if wrapped.code != 0:
-                    error = decode_plugin_daemon_error_payload(wrapped.message)
+        try:
+            async with self.http_client.stream("POST", url, headers=self._headers(), json=payload) as response:
+                if response.is_error:
+                    body = (await response.aread()).decode("utf-8", errors="replace")
+                    error = decode_plugin_daemon_error_payload(body)
                     if error is not None:
                         resolved_error = unwrap_plugin_daemon_error(
                             error_type=error["error_type"],
@@ -245,11 +227,47 @@ class DifyPluginDaemonToolClient:
                         _raise_tool_daemon_error(
                             error_type=resolved_error["error_type"],
                             message=resolved_error["message"],
+                            status_code=response.status_code,
                         )
-                    raise DifyPluginToolClientError(wrapped.message or "Plugin daemon returned an error stream item.")
-                if wrapped.data is None:
-                    raise DifyPluginToolClientError("Plugin daemon returned an empty stream item.")
-                yield response_model.model_validate(wrapped.data)
+                    raise DifyPluginToolClientError(
+                        body or "Plugin daemon stream request failed.", status_code=response.status_code
+                    )
+
+                async for raw_line in response.aiter_lines():
+                    line = raw_line.strip()
+                    if not line:
+                        continue
+                    if line.startswith("data:"):
+                        line = line[5:].strip()
+
+                    wrapped = PluginDaemonBasicResponse.model_validate_json(line)
+                    if wrapped.code != 0:
+                        error = decode_plugin_daemon_error_payload(wrapped.message)
+                        if error is not None:
+                            resolved_error = unwrap_plugin_daemon_error(
+                                error_type=error["error_type"],
+                                message=error["message"],
+                            )
+                            _raise_tool_daemon_error(
+                                error_type=resolved_error["error_type"],
+                                message=resolved_error["message"],
+                            )
+                        raise DifyPluginToolClientError(wrapped.message or "Plugin daemon returned an error stream item.")
+                    if wrapped.data is None:
+                        raise DifyPluginToolClientError("Plugin daemon returned an empty stream item.")
+                    yield response_model.model_validate(wrapped.data)
+        except DifyPluginToolClientError:
+            raise
+        except httpx.ConnectError as exc:
+            raise DifyPluginToolClientError(
+                f"Cannot connect to plugin daemon at {self.plugin_daemon_url}: {exc}",
+                error_type="InvokeConnectionError",
+            ) from exc
+        except httpx.ConnectTimeout as exc:
+            raise DifyPluginToolClientError(
+                f"Connection to plugin daemon timed out: {exc}",
+                error_type="InvokeConnectionError",
+            ) from exc
 
     def _headers(self) -> dict[str, str]:
         """Build required plugin-daemon transport headers for tool invocation."""
